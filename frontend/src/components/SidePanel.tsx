@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { Category, EventType, TimelineEvent } from '../types'
+import type { Category, EventType, TimelineEvent } from '../types'
 
 interface Props {
   event: TimelineEvent | null

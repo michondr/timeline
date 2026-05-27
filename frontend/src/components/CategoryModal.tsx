@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Category } from '../types'
+import type { Category } from '../types'
 
 interface Props {
   open: boolean

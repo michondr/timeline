@@ -16,6 +16,8 @@ security:
             pattern: ^/api
             stateless: true
             lazy: true
+            custom_authenticators:
+                - App\Security\ApiTokenAuthenticator
 
     access_control:
         - { path: ^/api/auth, roles: PUBLIC_ACCESS }

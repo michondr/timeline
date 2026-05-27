@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Category, TimelineEvent, ViewState } from '../types'
+import type { Category, TimelineEvent, ViewState } from '../types'
 
 interface Props {
   view: ViewState

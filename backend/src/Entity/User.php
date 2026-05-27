@@ -33,6 +33,14 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     #[ORM\Column(type: 'date')]
     private \DateTimeImmutable $birthdate;
 
+    /** bcrypt hash of the client-derived PBKDF2 auth key. */
+    #[ORM\Column(length: 255)]
+    private string $authKeyHash;
+
+    /** Current bearer token; rotated on each login. */
+    #[ORM\Column(length: 64, unique: true, nullable: true)]
+    private ?string $apiToken = null;
+
     /** Serialized WebAuthn credential store (JSON). */
     #[ORM\Column(type: 'text', nullable: true)]
     private ?string $passkeyCredentials = null;
@@ -62,6 +70,12 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
 
     public function getBirthdate(): \DateTimeImmutable { return $this->birthdate; }
     public function setBirthdate(\DateTimeImmutable $birthdate): static { $this->birthdate = $birthdate; return $this; }
+
+    public function getAuthKeyHash(): string { return $this->authKeyHash; }
+    public function setAuthKeyHash(string $hash): static { $this->authKeyHash = $hash; return $this; }
+
+    public function getApiToken(): ?string { return $this->apiToken; }
+    public function setApiToken(?string $token): static { $this->apiToken = $token; return $this; }
 
     public function getPasskeyCredentials(): ?string { return $this->passkeyCredentials; }
     public function setPasskeyCredentials(?string $creds): static { $this->passkeyCredentials = $creds; return $this; }

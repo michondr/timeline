@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react'
-import { ViewState } from '../types'
+import type { ViewState } from '../types'
 
 const DAY_MS = 86_400_000
 const HALF_YEAR = 182 * DAY_MS

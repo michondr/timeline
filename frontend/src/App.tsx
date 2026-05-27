@@ -1,42 +1,28 @@
-import { useCallback, useEffect, useState } from 'react'
-import { Category, TimelineEvent } from './types'
+import { useEffect, useState } from 'react'
+import type { Category, TimelineEvent } from './types'
+import type { DerivedKeys } from './crypto'
+import { decryptField, encryptField } from './crypto'
+import * as api from './api'
 import { useTimelineView } from './hooks/useTimelineView'
 import { Topbar } from './components/Topbar'
 import { Timeline } from './components/Timeline'
 import { SidePanel } from './components/SidePanel'
 import { PendingPanel } from './components/PendingPanel'
 import { CategoryModal } from './components/CategoryModal'
+import { AuthFlow } from './components/AuthFlow'
 
-// ── Demo data (replace with API calls once auth is wired) ────────────────────
-const TODAY    = new Date('2026-05-27')
-const BIRTH    = new Date('1993-09-15')
+type Phase = 'loading' | 'need-auth' | 'need-unlock' | 'ready'
 
-const DEMO_CATS: Category[] = [
-  { id: 'work',   name: 'Work',      color: '#4a9eff', isSystem: false, systemSlug: null },
-  { id: 'travel', name: 'Travel',    color: '#34c759', isSystem: false, systemSlug: null },
-  { id: 'health', name: 'Health',    color: '#ff6b6b', isSystem: false, systemSlug: null },
-  { id: 'edu',    name: 'Education', color: '#bf5af2', isSystem: false, systemSlug: null },
-  { id: 'habits', name: 'Habits',    color: '#ff9f0a', isSystem: true,  systemSlug: 'habits' },
-  { id: 'books',  name: 'Books',     color: '#ff9500', isSystem: true,  systemSlug: 'books'  },
-]
-
-const DEMO_EVENTS: TimelineEvent[] = [
-  { id: 'c1', categoryId: 'work',   name: 'Prague Sprint',   type: 'range', startDate: '2026-03-01', endDate: '2026-05-10', notifyForEnd: false, note: null },
-  { id: 'c2', categoryId: 'travel', name: 'Italy Trip',      type: 'range', startDate: '2026-07-20', endDate: '2026-08-02', notifyForEnd: false, note: null },
-  { id: 'c3', categoryId: 'work',   name: 'Berlin Conf.',    type: 'range', startDate: '2026-04-10', endDate: '2026-04-13', notifyForEnd: false, note: null },
-  { id: 'c4', categoryId: 'health', name: 'Half Marathon',   type: 'range', startDate: '2026-05-03', endDate: '2026-05-03', notifyForEnd: false, note: null },
-  { id: 'c5', categoryId: 'travel', name: 'Tenerife',        type: 'range', startDate: '2026-02-10', endDate: '2026-02-17', notifyForEnd: false, note: null },
-  { id: 'o1', categoryId: 'edu',    name: 'Learning Symfony',type: 'open',  startDate: '2025-11-01', endDate: null,         notifyForEnd: true,  note: null },
-  { id: 'o2', categoryId: 'health', name: 'Marathon Training',type:'open',  startDate: '2026-03-15', endDate: null,         notifyForEnd: true,  note: null },
-  { id: 'p1', categoryId: 'health', name: 'Birthday 🎂',     type: 'pin',   startDate: '2026-09-15', endDate: null,         notifyForEnd: false, note: null },
-  { id: 'p2', categoryId: 'work',   name: 'Contract signed', type: 'pin',   startDate: '2026-02-15', endDate: null,         notifyForEnd: false, note: null },
-  { id: 'p3', categoryId: 'health', name: 'Dentist',         type: 'pin',   startDate: '2026-06-10', endDate: null,         notifyForEnd: false, note: null },
-  { id: 'p4', categoryId: 'work',   name: 'Visa expires',    type: 'pin',   startDate: '2026-11-01', endDate: null,         notifyForEnd: false, note: null },
-]
+const TODAY = new Date()
 
 export default function App() {
-  const [categories, setCategories] = useState<Category[]>(DEMO_CATS)
-  const [events, setEvents]         = useState<TimelineEvent[]>(DEMO_EVENTS)
+  const [phase, setPhase]         = useState<Phase>('loading')
+  const [authEmail, setAuthEmail] = useState('')
+  const [encKey, setEncKey]       = useState<CryptoKey | null>(null)
+  const [birthdate, setBirthdate] = useState(new Date())
+
+  const [categories, setCategories] = useState<Category[]>([])
+  const [events, setEvents]         = useState<TimelineEvent[]>([])
 
   const [editEvent, setEditEvent]       = useState<TimelineEvent | null>(null)
   const [isNewEvent, setIsNewEvent]     = useState(false)
@@ -45,10 +31,66 @@ export default function App() {
   const [activePreset, setActivePreset] = useState(12)
 
   const { view, setPreset, pan, zoom } = useTimelineView(TODAY)
-
   const pendingEvents = events.filter(e => e.notifyForEnd && !e.endDate)
 
-  // ── Keyboard shortcuts ────────────────────────────────────────────────────
+  // ── Check stored token on mount ───────────────────────────────────────
+  useEffect(() => {
+    const token = localStorage.getItem('timeline_token')
+    if (!token) { setPhase('need-auth'); return }
+    api.getMe()
+      .then(me => {
+        setAuthEmail(me.email)
+        localStorage.setItem('timeline_email', me.email)
+        localStorage.setItem('timeline_birthdate', me.birthdate)
+        setPhase('need-unlock')
+      })
+      .catch(() => {
+        localStorage.removeItem('timeline_token')
+        setPhase('need-auth')
+      })
+  }, [])
+
+  // ── Handle token expiry from API ──────────────────────────────────────
+  useEffect(() => {
+    function onExpired() {
+      setEncKey(null)
+      setCategories([])
+      setEvents([])
+      setAuthEmail(localStorage.getItem('timeline_email') ?? '')
+      setPhase('need-auth')
+    }
+    window.addEventListener('auth:expired', onExpired)
+    return () => window.removeEventListener('auth:expired', onExpired)
+  }, [])
+
+  // ── Load data when authenticated ──────────────────────────────────────
+  useEffect(() => {
+    if (phase !== 'ready' || !encKey) return
+    const key = encKey
+    Promise.all([api.fetchCategories(), api.fetchEvents()])
+      .then(async ([rawCats, rawEvts]) => {
+        const cats = await Promise.all(rawCats.map(async c => ({
+          ...c,
+          name: await decryptField(key, c.name),
+        })))
+        const evts = await Promise.all(rawEvts.map(async e => ({
+          ...e,
+          name: await decryptField(key, e.name),
+          note: e.note ? await decryptField(key, e.note) : null,
+        })))
+        setCategories(cats)
+        setEvents(evts)
+      })
+      .catch(console.error)
+  }, [phase, encKey])
+
+  function onAuth(keys: DerivedKeys, _token: string, birthdateStr: string) {
+    setEncKey(keys.encKey)
+    setBirthdate(new Date(birthdateStr + 'T00:00:00'))
+    setPhase('ready')
+  }
+
+  // ── Keyboard shortcuts ────────────────────────────────────────────────
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (catModalOpen) {
@@ -56,9 +98,7 @@ export default function App() {
         return
       }
       if (e.key === 'Escape') {
-        setEditEvent(null)
-        setIsNewEvent(false)
-        setPendingOpen(false)
+        setEditEvent(null); setIsNewEvent(false); setPendingOpen(false)
         return
       }
       if ((e.key === 'n' || e.key === 'N') &&
@@ -72,64 +112,95 @@ export default function App() {
   }, [catModalOpen])
 
   function openNew() {
-    setEditEvent(null)
-    setIsNewEvent(true)
-    setPendingOpen(false)
+    setEditEvent(null); setIsNewEvent(true); setPendingOpen(false)
   }
 
   function handleEventClick(id: string) {
     const ev = events.find(e => e.id === id)
-    if (ev) {
-      setEditEvent(ev)
-      setIsNewEvent(false)
-      setPendingOpen(false)
-    }
+    if (ev) { setEditEvent(ev); setIsNewEvent(false); setPendingOpen(false) }
   }
 
-  function handleSave(patch: Partial<TimelineEvent> & { id?: string }) {
+  async function handleSave(patch: Partial<TimelineEvent> & { id?: string }) {
+    if (!encKey) return
+    const encName = await encryptField(encKey, patch.name ?? '')
+    const encNote = patch.note ? await encryptField(encKey, patch.note) : null
+
     if (patch.id) {
+      await api.updateEvent(patch.id, {
+        name: encName, note: encNote,
+        type: patch.type, categoryId: patch.categoryId,
+        startDate: patch.startDate ?? null,
+        endDate: patch.endDate ?? null,
+        notifyForEnd: patch.notifyForEnd,
+      })
       setEvents(prev => prev.map(e => e.id === patch.id ? { ...e, ...patch } : e))
     } else {
-      const newEv: TimelineEvent = {
-        id: `ev_${Date.now()}`,
+      const created = await api.createEvent({
         categoryId: patch.categoryId ?? categories[0]?.id ?? '',
-        name: patch.name ?? '',
+        name: encName,
         type: patch.type ?? 'range',
         startDate: patch.startDate ?? null,
         endDate: patch.endDate ?? null,
         notifyForEnd: patch.notifyForEnd ?? false,
+        note: encNote,
+      })
+      setEvents(prev => [...prev, {
+        id: created.id,
+        categoryId: created.categoryId,
+        name: patch.name ?? '',
+        type: created.type,
+        startDate: created.startDate,
+        endDate: created.endDate,
+        notifyForEnd: created.notifyForEnd,
         note: patch.note ?? null,
-      }
-      setEvents(prev => [...prev, newEv])
+      }])
     }
     setEditEvent(null)
     setIsNewEvent(false)
   }
 
-  function handleDelete(id: string) {
+  async function handleDelete(id: string) {
+    await api.deleteEvent(id)
     setEvents(prev => prev.filter(e => e.id !== id))
     setEditEvent(null)
   }
 
-  function handleCreateCat(name: string, color: string) {
-    const newCat: Category = { id: `cat_${Date.now()}`, name, color, isSystem: false, systemSlug: null }
-    setCategories(prev => [...prev, newCat])
+  async function handleCreateCat(name: string, color: string) {
+    if (!encKey) return
+    const encName = await encryptField(encKey, name)
+    const created = await api.createCategory(encName, color)
+    setCategories(prev => [...prev, { ...created, name }])
   }
 
-  function handleDeleteCat(id: string) {
+  async function handleDeleteCat(id: string) {
+    await api.deleteCategory(id)
     setCategories(prev => prev.filter(c => c.id !== id))
   }
 
   function handlePreset(months: number) {
-    setActivePreset(months)
-    setPreset(months)
+    setActivePreset(months); setPreset(months)
   }
 
-  const panCb  = pan
-  const zoomCb = zoom
+  const panelVisible = editEvent !== null || isNewEvent
 
-  const panelVisible = (editEvent !== null || isNewEvent)
+  // ── Auth screens ──────────────────────────────────────────────────────
+  if (phase === 'loading') {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', background: 'var(--bg)' }}>
+        <div style={{ color: 'var(--muted)', fontSize: 14 }}>Loading…</div>
+      </div>
+    )
+  }
 
+  if (phase === 'need-auth') {
+    return <AuthFlow mode="auth" email={authEmail || undefined} onAuth={onAuth} />
+  }
+
+  if (phase === 'need-unlock') {
+    return <AuthFlow mode="unlock" email={authEmail} onAuth={onAuth} />
+  }
+
+  // ── Timeline ──────────────────────────────────────────────────────────
   return (
     <>
       <Topbar
@@ -145,15 +216,14 @@ export default function App() {
         <Timeline
           view={view}
           today={TODAY}
-          birthdate={BIRTH}
+          birthdate={birthdate}
           categories={categories}
           events={events}
-          onPan={panCb}
-          onZoom={zoomCb}
+          onPan={pan}
+          onZoom={zoom}
           onEventClick={handleEventClick}
         />
 
-        {/* Backdrop closes both panels */}
         {(panelVisible || pendingOpen) && !catModalOpen && (
           <div
             style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.35)', zIndex: 15, cursor: 'pointer' }}

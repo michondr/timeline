@@ -1,4 +1,4 @@
-import { Category, TimelineEvent } from '../types'
+import type { Category, TimelineEvent } from '../types'
 
 interface Props {
   events: TimelineEvent[]
