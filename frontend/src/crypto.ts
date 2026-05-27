@@ -1,6 +1,18 @@
 const enc = new TextEncoder()
 const dec = new TextDecoder()
 
+export function toB64url(buf: ArrayBuffer | Uint8Array): string {
+  const bytes = buf instanceof Uint8Array ? buf : new Uint8Array(buf)
+  let s = ''
+  bytes.forEach(b => (s += String.fromCharCode(b)))
+  return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '')
+}
+
+export function fromB64url(s: string): Uint8Array {
+  const padded = s.replace(/-/g, '+').replace(/_/g, '/') + '=='.slice(0, (4 - s.length % 4) % 4)
+  return Uint8Array.from(atob(padded), c => c.charCodeAt(0))
+}
+
 function toB64(buf: ArrayBuffer | Uint8Array): string {
   const bytes = buf instanceof Uint8Array ? buf : new Uint8Array(buf)
   let s = ''

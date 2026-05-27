@@ -19,29 +19,25 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     #[ORM\Column(type: 'uuid', unique: true)]
     private ?string $id = null;
 
-    #[ORM\Column(length: 255, unique: true)]
-    private string $email;
+    /** Base64url-encoded random bytes set by the server during passkey registration. */
+    #[ORM\Column(length: 64, unique: true)]
+    private string $userHandle;
 
-    /** Argon2id salt for client-side AES-256-GCM key derivation (not secret). */
     #[ORM\Column(length: 64)]
     private string $kdfSalt;
 
-    /** Small AES-GCM blob the client encrypts with its derived key; auth-tag fails fast on wrong passphrase. */
     #[ORM\Column(type: 'text')]
     private string $verificationBlob;
 
-    #[ORM\Column(type: 'date')]
+    #[ORM\Column(type: 'date_immutable')]
     private \DateTimeImmutable $birthdate;
 
-    /** bcrypt hash of the client-derived PBKDF2 auth key. */
     #[ORM\Column(length: 255)]
     private string $authKeyHash;
 
-    /** Current bearer token; rotated on each login. */
     #[ORM\Column(length: 64, unique: true, nullable: true)]
     private ?string $apiToken = null;
 
-    /** Serialized WebAuthn credential store (JSON). */
     #[ORM\Column(type: 'text', nullable: true)]
     private ?string $passkeyCredentials = null;
 
@@ -59,8 +55,8 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
 
     public function getId(): ?string { return $this->id; }
 
-    public function getEmail(): string { return $this->email; }
-    public function setEmail(string $email): static { $this->email = $email; return $this; }
+    public function getUserHandle(): string { return $this->userHandle; }
+    public function setUserHandle(string $handle): static { $this->userHandle = $handle; return $this; }
 
     public function getKdfSalt(): string { return $this->kdfSalt; }
     public function setKdfSalt(string $kdfSalt): static { $this->kdfSalt = $kdfSalt; return $this; }
@@ -87,7 +83,7 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     public function getEvents(): Collection { return $this->events; }
 
     // UserInterface
-    public function getUserIdentifier(): string { return $this->email; }
+    public function getUserIdentifier(): string { return $this->userHandle; }
     public function getRoles(): array { return ['ROLE_USER']; }
     public function getPassword(): ?string { return null; }
     public function eraseCredentials(): void {}

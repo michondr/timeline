@@ -19,6 +19,11 @@ class UserRepository extends ServiceEntityRepository implements PasswordUpgrader
         parent::__construct($registry, User::class);
     }
 
+    public function findByUserHandle(string $userHandle): ?User
+    {
+        return $this->findOneBy(['userHandle' => $userHandle]);
+    }
+
     public function upgradePassword(PasswordAuthenticatedUserInterface $user, string $newHashedPassword): void
     {
         if (!$user instanceof User) {

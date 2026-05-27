@@ -10,16 +10,17 @@ import { SidePanel } from './components/SidePanel'
 import { PendingPanel } from './components/PendingPanel'
 import { CategoryModal } from './components/CategoryModal'
 import { AuthFlow } from './components/AuthFlow'
+import type { DateFormat } from './components/AuthFlow'
 
-type Phase = 'loading' | 'need-auth' | 'need-unlock' | 'ready'
+type Phase = 'loading' | 'auth' | 'unlock' | 'ready'
 
 const TODAY = new Date()
 
 export default function App() {
-  const [phase, setPhase]         = useState<Phase>('loading')
-  const [authEmail, setAuthEmail] = useState('')
-  const [encKey, setEncKey]       = useState<CryptoKey | null>(null)
-  const [birthdate, setBirthdate] = useState(new Date())
+  const [phase, setPhase]           = useState<Phase>('loading')
+  const [encKey, setEncKey]         = useState<CryptoKey | null>(null)
+  const [birthdate, setBirthdate]   = useState(new Date())
+  const [dateFormat, setDateFormat] = useState<DateFormat>('DMY-dot')
 
   const [categories, setCategories] = useState<Category[]>([])
   const [events, setEvents]         = useState<TimelineEvent[]>([])
@@ -36,18 +37,10 @@ export default function App() {
   // ── Check stored token on mount ───────────────────────────────────────
   useEffect(() => {
     const token = localStorage.getItem('timeline_token')
-    if (!token) { setPhase('need-auth'); return }
+    if (!token) { setPhase('auth'); return }
     api.getMe()
-      .then(me => {
-        setAuthEmail(me.email)
-        localStorage.setItem('timeline_email', me.email)
-        localStorage.setItem('timeline_birthdate', me.birthdate)
-        setPhase('need-unlock')
-      })
-      .catch(() => {
-        localStorage.removeItem('timeline_token')
-        setPhase('need-auth')
-      })
+      .then(() => setPhase('unlock'))
+      .catch(() => { localStorage.removeItem('timeline_token'); setPhase('auth') })
   }, [])
 
   // ── Handle token expiry from API ──────────────────────────────────────
@@ -56,8 +49,7 @@ export default function App() {
       setEncKey(null)
       setCategories([])
       setEvents([])
-      setAuthEmail(localStorage.getItem('timeline_email') ?? '')
-      setPhase('need-auth')
+      setPhase('auth')
     }
     window.addEventListener('auth:expired', onExpired)
     return () => window.removeEventListener('auth:expired', onExpired)
@@ -84,9 +76,10 @@ export default function App() {
       .catch(console.error)
   }, [phase, encKey])
 
-  function onAuth(keys: DerivedKeys, _token: string, birthdateStr: string) {
+  function onAuth(keys: DerivedKeys, _token: string, birthdateStr: string, fmt: DateFormat) {
     setEncKey(keys.encKey)
     setBirthdate(new Date(birthdateStr + 'T00:00:00'))
+    setDateFormat(fmt)
     setPhase('ready')
   }
 
@@ -192,12 +185,12 @@ export default function App() {
     )
   }
 
-  if (phase === 'need-auth') {
-    return <AuthFlow mode="auth" email={authEmail || undefined} onAuth={onAuth} />
+  if (phase === 'auth') {
+    return <AuthFlow mode="auth" onAuth={onAuth} />
   }
 
-  if (phase === 'need-unlock') {
-    return <AuthFlow mode="unlock" email={authEmail} onAuth={onAuth} />
+  if (phase === 'unlock') {
+    return <AuthFlow mode="unlock" onAuth={onAuth} />
   }
 
   // ── Timeline ──────────────────────────────────────────────────────────

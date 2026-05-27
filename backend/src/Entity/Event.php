@@ -33,10 +33,10 @@ class Event
     #[ORM\Column(length: 8)]
     private string $type = self::TYPE_RANGE;
 
-    #[ORM\Column(type: 'date', nullable: true)]
+    #[ORM\Column(type: 'datetime_immutable', nullable: true)]
     private ?\DateTimeImmutable $startDate = null;
 
-    #[ORM\Column(type: 'date', nullable: true)]
+    #[ORM\Column(type: 'datetime_immutable', nullable: true)]
     private ?\DateTimeImmutable $endDate = null;
 
     /** When true, event appears in the pending list until endDate is filled in. */

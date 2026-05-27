@@ -24,42 +24,61 @@ async function json<T>(r: Response): Promise<T> {
   return body as T
 }
 
-// Auth
-export async function registerInit(email: string) {
-  return json<{ kdfSalt: string }>(
-    await req('/auth/register/init', { method: 'POST', body: JSON.stringify({ email }) }),
+// ── Passkey auth ──────────────────────────────────────────────────────────────
+
+export async function passkeyLoginChallenge() {
+  return json<{ challenge: string; rpId: string; timeout: number }>(
+    await req('/auth/passkey/login/challenge', { method: 'POST' }),
   )
 }
 
-export async function registerFinish(data: {
-  email: string
+export async function passkeyLoginVerify(userHandle: string) {
+  const r = await req('/auth/passkey/login/verify', {
+    method: 'POST',
+    body: JSON.stringify({ userHandle }),
+  })
+  if (r.status === 404) {
+    const body = await r.json()
+    return { found: false as const, userHandle: body.userHandle as string }
+  }
+  return json<{ found: true; userHandle: string; kdfSalt: string; verificationBlob: string }>(r)
+}
+
+export async function passkeyRegisterChallenge() {
+  return json<{ challenge: string; rpId: string; rpName: string; userId: string; timeout: number }>(
+    await req('/auth/passkey/register/challenge', { method: 'POST' }),
+  )
+}
+
+export async function passkeyRegisterFinish(data: {
+  userHandle: string
   birthdate: string
   kdfSalt: string
   verificationBlob: string
   authKeyHex: string
 }) {
   return json<{ apiToken: string; birthdate: string }>(
-    await req('/auth/register/finish', { method: 'POST', body: JSON.stringify(data) }),
+    await req('/auth/passkey/register/finish', { method: 'POST', body: JSON.stringify(data) }),
   )
 }
 
-export async function loginInit(email: string) {
-  return json<{ kdfSalt: string; verificationBlob: string }>(
-    await req('/auth/login/init', { method: 'POST', body: JSON.stringify({ email }) }),
-  )
-}
-
-export async function loginFinish(email: string, authKeyHex: string) {
+export async function loginFinish(userHandle: string, authKeyHex: string) {
   return json<{ apiToken: string; birthdate: string }>(
-    await req('/auth/login/finish', { method: 'POST', body: JSON.stringify({ email, authKeyHex }) }),
+    await req('/auth/login/finish', {
+      method: 'POST',
+      body: JSON.stringify({ userHandle, authKeyHex }),
+    }),
   )
 }
 
 export async function getMe() {
-  return json<{ email: string; birthdate: string }>(await req('/auth/me'))
+  return json<{ birthdate: string; kdfSalt: string; verificationBlob: string }>(
+    await req('/auth/me'),
+  )
 }
 
-// Categories
+// ── Categories ────────────────────────────────────────────────────────────────
+
 export interface RawCategory {
   id: string
   name: string
@@ -83,7 +102,8 @@ export async function deleteCategory(id: string) {
   if (!r.ok && r.status !== 204) throw new ApiError(r.status, 'Delete failed')
 }
 
-// Events
+// ── Events ────────────────────────────────────────────────────────────────────
+
 export interface RawEvent {
   id: string
   categoryId: string

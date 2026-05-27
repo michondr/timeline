@@ -1,4 +1,6 @@
 parameters:
+    webauthn_rp_id:   '%env(WEBAUTHN_RP_ID)%'
+    webauthn_rp_name: '%env(WEBAUTHN_RP_NAME)%'
 
 services:
     _defaults:
@@ -12,3 +14,8 @@ services:
             - '../src/Entity/'
             - '../src/Kernel.php'
             - '../src/Migrations/'
+
+    App\Controller\AuthController:
+        arguments:
+            $rpId:   '%webauthn_rp_id%'
+            $rpName: '%webauthn_rp_name%'
