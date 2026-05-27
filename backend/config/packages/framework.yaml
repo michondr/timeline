@@ -1,0 +1,22 @@
+framework:
+    secret: '%env(APP_SECRET)%'
+    router:
+        utf8: true
+    serializer:
+        enabled: true
+    property_info:
+        enabled: true
+    validation: ~
+    messenger:
+        failure_transport: failed
+        transports:
+            async:
+                dsn: '%env(DATABASE_URL)%'
+                options:
+                    use_notify: true
+                    check_delayed_interval: 1000
+            failed:
+                dsn: '%env(DATABASE_URL)%'
+                options:
+                    queue_name: failed
+        routing: []

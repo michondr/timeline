@@ -1,4 +1,4 @@
-FROM php:8.3-fpm-alpine
+FROM php:8.4-fpm-alpine
 
 # System deps + PHP extensions
 RUN apk add --no-cache \
@@ -8,6 +8,9 @@ RUN apk add --no-cache \
         postgresql-dev \
         icu-dev \
         linux-headers \
+        autoconf \
+        g++ \
+        make \
     && docker-php-ext-configure intl \
     && docker-php-ext-install \
         pdo \
