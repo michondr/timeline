@@ -1,0 +1,20 @@
+# Environment
+.env
+
+# Symfony
+backend/vendor/
+backend/var/
+backend/.env.local
+backend/.env.*.local
+backend/config/jwt/
+
+# Node
+frontend/node_modules/
+frontend/dist/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+wip/
