@@ -414,9 +414,9 @@ export function Timeline({ view, today, birthdate, categories, events, habits, o
 
   // ── Touch pan / pinch-zoom ────────────────────────────────────────────────
   const touchStateRef = useRef<{
-    startX: number; prevX: number
+    startX: number; startY: number; prevX: number
     prevDist: number | null
-    moved: boolean; startTarget: EventTarget | null
+    moved: boolean; isVertical: boolean | null; startTarget: EventTarget | null
   } | null>(null)
 
   const latestRef = useRef({ TL_W, span, PAD, w, onPan, onZoom, onEventClick, onBackgroundClick })
@@ -428,7 +428,7 @@ export function Timeline({ view, today, birthdate, categories, events, habits, o
 
     function onTouchStart(e: TouchEvent) {
       if (e.touches.length === 1) {
-        touchStateRef.current = { startX: e.touches[0].clientX, prevX: e.touches[0].clientX, prevDist: null, moved: false, startTarget: e.target }
+        touchStateRef.current = { startX: e.touches[0].clientX, startY: e.touches[0].clientY, prevX: e.touches[0].clientX, prevDist: null, moved: false, isVertical: null, startTarget: e.target }
       } else if (e.touches.length === 2) {
         const dx = e.touches[0].clientX - e.touches[1].clientX
         const dy = e.touches[0].clientY - e.touches[1].clientY
@@ -439,14 +439,21 @@ export function Timeline({ view, today, birthdate, categories, events, habits, o
     function onTouchMove(e: TouchEvent) {
       const s = touchStateRef.current
       if (!s) return
-      e.preventDefault()
       const { TL_W: tlw, span: sp, PAD: pad, w: cw, onPan: pan, onZoom: zoom } = latestRef.current
       if (e.touches.length === 1 && s.prevDist === null) {
+        const adx = Math.abs(e.touches[0].clientX - s.startX)
+        const ady = Math.abs(e.touches[0].clientY - s.startY)
+        if (s.isVertical === null && (adx > 4 || ady > 4)) {
+          s.isVertical = ady > adx
+        }
+        if (s.isVertical) return  // let browser handle vertical scroll natively
+        e.preventDefault()
         const dx = s.prevX - e.touches[0].clientX
         s.prevX = e.touches[0].clientX
-        if (Math.abs(e.touches[0].clientX - s.startX) > 5) s.moved = true
+        if (adx > 5) s.moved = true
         pan((dx / tlw) * sp)
       } else if (e.touches.length === 2) {
+        e.preventDefault()
         const dx = e.touches[0].clientX - e.touches[1].clientX
         const dy = e.touches[0].clientY - e.touches[1].clientY
         const dist = Math.sqrt(dx * dx + dy * dy)
@@ -506,12 +513,20 @@ export function Timeline({ view, today, birthdate, categories, events, habits, o
       {/* Timeline canvas */}
       <div
         ref={wrapRef}
-        style={{ flex: 1, position: 'relative', overflow: 'hidden', background: 'var(--bg)', touchAction: 'none' }}
+        style={{
+          flex: 1, position: 'relative', background: 'var(--bg)',
+          overflowX: 'hidden',
+          overflowY: isMobile ? 'auto' : 'hidden',
+          touchAction: isMobile ? 'pan-y' : 'none',
+        }}
         onWheel={handleWheel}
       >
         <svg
           ref={svgRef}
-          style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', cursor: dragRef.current ? 'grabbing' : 'grab' }}
+          style={isMobile
+            ? { display: 'block', width: '100%', height: Math.max(h, BOOKS_Y + 60 + habits.length * 22), cursor: 'grab' }
+            : { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', cursor: dragRef.current ? 'grabbing' : 'grab' }
+          }
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}

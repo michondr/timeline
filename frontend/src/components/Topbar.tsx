@@ -55,6 +55,7 @@ export function Topbar({ pendingCount, habitIntegration, onNewEvent, onPending, 
               ⚠ {badge(pendingCount)}
             </button>
           )}
+          <SyncWidget integration={habitIntegration} onOpen={onHabitSettings} onSync={onHabitSync} compact />
           <button onClick={onCategories} style={{ ...btnGhost, padding: '6px 10px' }}>⊞</button>
           <button onClick={onExport} style={{ ...btnGhost, padding: '6px 10px' }}>↓</button>
           <button onClick={onNewEvent} style={{ ...btnPrimary, padding: '6px 14px' }}>+ New</button>
@@ -139,10 +140,11 @@ const btnWarn: React.CSSProperties   = {
   background: 'rgba(255,159,10,0.12)', borderColor: 'rgba(255,159,10,0.3)', color: 'var(--warn)',
 }
 
-function SyncWidget({ integration, onOpen, onSync }: {
+function SyncWidget({ integration, onOpen, onSync, compact = false }: {
   integration: HabitIntegration | null
   onOpen: () => void
   onSync: () => void
+  compact?: boolean
 }) {
   const dotColor = !integration?.hasToken
     ? 'var(--muted)'
@@ -160,10 +162,15 @@ function SyncWidget({ integration, onOpen, onSync }: {
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--muted)' }}>
-      <div style={{ width: 7, height: 7, borderRadius: '50%', background: dotColor, flexShrink: 0 }} />
-      <button onClick={onOpen} style={{ background: 'none', border: 'none', color: 'var(--muted)', fontSize: 12, padding: 0, cursor: 'pointer' }}>
-        {label}
-      </button>
+      <div
+        onClick={onOpen}
+        style={{ width: 7, height: 7, borderRadius: '50%', background: dotColor, flexShrink: 0, cursor: 'pointer' }}
+      />
+      {!compact && (
+        <button onClick={onOpen} style={{ background: 'none', border: 'none', color: 'var(--muted)', fontSize: 12, padding: 0, cursor: 'pointer' }}>
+          {label}
+        </button>
+      )}
       {integration?.hasToken && (
         <button onClick={onSync} style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 5, color: 'var(--muted)', fontSize: 11, padding: '2px 6px', cursor: 'pointer' }}>
           ↻
