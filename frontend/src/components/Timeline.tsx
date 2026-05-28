@@ -140,8 +140,8 @@ export function Timeline({ view, today, birthdate, categories, events, onPan, on
     pieces.push(`<line x1="${x}" y1="${AXIS_Y - 4}" x2="${x}" y2="${AXIS_Y + 4}" stroke="#3c3c42" stroke-width="1"/>`)
   })
 
-  // Age circles (birth year +25 to +50)
-  for (let age = 25; age <= 50; age++) {
+  // Age circles (birth year +0 to +100)
+  for (let age = 0; age <= 100; age++) {
     const bday = new Date(birthdate)
     bday.setFullYear(birthdate.getFullYear() + age)
     const x = dateX(bday)
@@ -199,13 +199,16 @@ export function Timeline({ view, today, birthdate, categories, events, onPan, on
     const labelY = y - 8
     const sub    = `Open · started ${fmtDate(start)}`
 
+    if (startX > w - PAD) return
+
+    const startsInView = startX >= PAD
     pieces.push(`<g class="ev" data-id="${ev.id}" data-tip="${encodeURIComponent(JSON.stringify({ name: ev.name, sub }))}" style="cursor:pointer;opacity:${hl ? 1 : 0.15}">`)
-    if (startX >= PAD && startX <= w - PAD) {
+    if (startsInView) {
       pieces.push(`<line x1="${startX}" y1="${y}" x2="${startX}" y2="${AXIS_Y}" stroke="${col}" stroke-width="1" opacity="0.12"/>`)
+      pieces.push(`<circle cx="${startX}" cy="${y}" r="5" fill="${col}"/>`)
     }
     pieces.push(`<line x1="${x1}" y1="${y}" x2="${x2 - 14}" y2="${y}" stroke="${col}" stroke-width="2"/>`)
     pieces.push(`<polygon points="${x2 - 12},${y - 5} ${x2},${y} ${x2 - 12},${y + 5}" fill="${col}"/>`)
-    pieces.push(`<circle cx="${x1}" cy="${y}" r="5" fill="${col}"/>`)
     if (ev.notifyForEnd) {
       pieces.push(`<text x="${x1 + 12}" y="${labelY + 1}" fill="#ff9f0a" font-size="11" font-family="system-ui">⚠</text>`)
       pieces.push(`<text x="${x1 + 26}" y="${labelY}" fill="${col}" font-size="11" font-family="system-ui" font-weight="500">${ev.name}</text>`)
