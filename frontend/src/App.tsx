@@ -178,6 +178,26 @@ export default function App() {
     setActivePreset(months); setPreset(months)
   }
 
+  function handleExport() {
+    const catName = (id: string) => categories.find(c => c.id === id)?.name ?? id
+    const escape  = (v: string) => `"${v.replace(/"/g, '""')}"`
+    const header  = ['name', 'category', 'type', 'start', 'end', 'notifyForEnd', 'note']
+    const rows    = events.map(ev => [
+      ev.name,
+      catName(ev.categoryId),
+      ev.type,
+      ev.startDate ?? '',
+      ev.endDate   ?? '',
+      ev.notifyForEnd ? 'yes' : 'no',
+      ev.note ?? '',
+    ])
+    const csv  = [header, ...rows].map(r => r.map(escape).join(',')).join('\n')
+    const url  = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }))
+    const a    = Object.assign(document.createElement('a'), { href: url, download: 'timeline.csv' })
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   // ── Auth screens ──────────────────────────────────────────────────────
   if (phase === 'loading') {
     return (
@@ -203,6 +223,7 @@ export default function App() {
         onNewEvent={openNew}
         onPending={() => setPendingOpen(p => !p)}
         onCategories={() => setCatModal(c => !c)}
+        onExport={handleExport}
         onPreset={handlePreset}
         activePreset={activePreset}
       />

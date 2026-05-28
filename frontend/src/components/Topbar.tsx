@@ -6,6 +6,7 @@ interface Props {
   onNewEvent: () => void
   onPending: () => void
   onCategories: () => void
+  onExport: () => void
   onPreset: (months: number) => void
   activePreset: number
 }
@@ -36,7 +37,7 @@ const badge = (n: number) => (
   }}>{n}</span>
 )
 
-export function Topbar({ pendingCount, onNewEvent, onPending, onCategories, onPreset, activePreset }: Props) {
+export function Topbar({ pendingCount, onNewEvent, onPending, onCategories, onExport, onPreset, activePreset }: Props) {
   const isMobile = useIsMobile()
 
   if (isMobile) {
@@ -51,6 +52,7 @@ export function Topbar({ pendingCount, onNewEvent, onPending, onCategories, onPr
             </button>
           )}
           <button onClick={onCategories} style={{ ...btnGhost, padding: '6px 10px' }}>⊞</button>
+          <button onClick={onExport} style={{ ...btnGhost, padding: '6px 10px' }}>↓</button>
           <button onClick={onNewEvent} style={{ ...btnPrimary, padding: '6px 14px' }}>+ New</button>
         </div>
         <div style={{ height: 34, display: 'flex', alignItems: 'center', padding: '0 14px', borderTop: '1px solid var(--border)' }}>
@@ -104,6 +106,7 @@ export function Topbar({ pendingCount, onNewEvent, onPending, onCategories, onPr
       <div style={{ flex: 1 }} />
 
       <button onClick={onCategories} style={btnGhost}>⊞ Categories</button>
+      <button onClick={onExport} style={btnGhost}>↓ Export</button>
 
       {pendingCount > 0 && (
         <button onClick={onPending} style={btnWarn}>
