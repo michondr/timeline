@@ -25,7 +25,8 @@
         "symfony/yaml": "^8.0",
         "symfony/doctrine-messenger": "^8.0",
         "symfony/dotenv": "^8.0",
-        "symfony/uid": "^8.0"
+        "symfony/uid": "^8.0",
+        "symfony/http-client": "^8.0"
     },
     "require-dev": {
         "symfony/debug-bundle": "^8.0",

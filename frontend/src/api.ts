@@ -135,3 +135,38 @@ export async function deleteEvent(id: string) {
   const r = await req(`/events/${id}`, { method: 'DELETE' })
   if (!r.ok && r.status !== 204) throw new ApiError(r.status, 'Delete failed')
 }
+
+// ── Habits ────────────────────────────────────────────────────────────────────
+
+export interface RawHabit {
+  id: string
+  name: string
+  color: string
+  startDate: string | null
+  logs: Record<string, 'done' | 'skip' | 'fail'>
+}
+
+export interface RawHabitIntegration {
+  hasToken: boolean
+  lastRunAt: string | null
+  lastRunStatus: 'ok' | 'error' | null
+  lastRunError: string | null
+}
+
+export async function fetchHabits(from: string, to: string) {
+  return json<RawHabit[]>(await req(`/habits?from=${from}&to=${to}`))
+}
+
+export async function fetchHabitIntegration() {
+  return json<RawHabitIntegration>(await req('/habits/integration'))
+}
+
+export async function saveHabitToken(sessionToken: string) {
+  return json<{ ok: boolean }>(
+    await req('/habits/integration', { method: 'PUT', body: JSON.stringify({ sessionToken }) }),
+  )
+}
+
+export async function triggerHabitSync() {
+  return json<{ ok: boolean }>(await req('/habits/sync', { method: 'POST' }))
+}

@@ -23,3 +23,18 @@ export interface ViewState {
   startMs: number
   endMs: number
 }
+
+export interface Habit {
+  id: string
+  name: string
+  color: string
+  startDate: string | null  // YYYY-MM-DD
+  logs: Record<string, 'done' | 'skip' | 'fail'>  // date → status
+}
+
+export interface HabitIntegration {
+  hasToken: boolean
+  lastRunAt: string | null   // ISO
+  lastRunStatus: 'ok' | 'error' | null
+  lastRunError: string | null
+}

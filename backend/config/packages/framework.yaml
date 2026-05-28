@@ -19,4 +19,5 @@ framework:
                 dsn: 'doctrine://default'
                 options:
                     queue_name: failed
-        routing: []
+        routing:
+            'App\Message\SyncTickTickMessage': async

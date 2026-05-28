@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import type { Category, TimelineEvent } from './types'
+import { useEffect, useRef, useState } from 'react'
+import type { Category, Habit, HabitIntegration, TimelineEvent } from './types'
 import type { DerivedKeys } from './crypto'
 import { decryptField, encryptField } from './crypto'
 import * as api from './api'
@@ -9,6 +9,7 @@ import { Timeline } from './components/Timeline'
 import { SidePanel } from './components/SidePanel'
 import { PendingPanel } from './components/PendingPanel'
 import { CategoryPanel } from './components/CategoryPanel'
+import { HabitSettingsPanel } from './components/HabitSettingsPanel'
 import { AuthFlow } from './components/AuthFlow'
 import type { DateFormat } from './components/AuthFlow'
 
@@ -25,11 +26,17 @@ export default function App() {
   const [categories, setCategories] = useState<Category[]>([])
   const [events, setEvents]         = useState<TimelineEvent[]>([])
 
+  const [habits, setHabits]                   = useState<Habit[]>([])
+  const [habitIntegration, setHabitIntegration] = useState<HabitIntegration | null>(null)
+  const [habitSettingsOpen, setHabitSettings]   = useState(false)
+
   const [editEvent, setEditEvent]       = useState<TimelineEvent | null>(null)
   const [isNewEvent, setIsNewEvent]     = useState(false)
   const [pendingOpen, setPendingOpen]   = useState(false)
   const [catModalOpen, setCatModal]     = useState(false)
   const [activePreset, setActivePreset] = useState(12)
+
+  const habitFetchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const { view, setPreset, pan, zoom } = useTimelineView(TODAY)
   const pendingEvents = events.filter(e => e.notifyForEnd && (!e.startDate || !e.endDate))
@@ -76,6 +83,40 @@ export default function App() {
       .catch(console.error)
   }, [phase, encKey])
 
+  // ── Load habits when view changes (debounced) ─────────────────────────
+  useEffect(() => {
+    if (phase !== 'ready') return
+    if (habitFetchTimer.current) clearTimeout(habitFetchTimer.current)
+    habitFetchTimer.current = setTimeout(async () => {
+      try {
+        const from = new Date(view.startMs).toISOString().slice(0, 10)
+        const to   = new Date(view.endMs).toISOString().slice(0, 10)
+        const raw  = await api.fetchHabits(from, to)
+        setHabits(raw.map(h => ({ ...h, logs: h.logs ?? {} })))
+      } catch { /* silently ignore — no habits yet */ }
+    }, 300)
+  }, [phase, view.startMs, view.endMs])
+
+  // ── Load integration status once on ready ─────────────────────────────
+  useEffect(() => {
+    if (phase !== 'ready') return
+    api.fetchHabitIntegration().then(setHabitIntegration).catch(() => {})
+  }, [phase])
+
+  async function handleHabitSave(token: string) {
+    await api.saveHabitToken(token)
+    const integration = await api.fetchHabitIntegration()
+    setHabitIntegration(integration)
+  }
+
+  async function handleHabitSync() {
+    await api.triggerHabitSync()
+    setTimeout(async () => {
+      const integration = await api.fetchHabitIntegration()
+      setHabitIntegration(integration)
+    }, 3000)
+  }
+
   function onAuth(keys: DerivedKeys, _token: string, birthdateStr: string, fmt: DateFormat) {
     setEncKey(keys.encKey)
     setBirthdate(new Date(birthdateStr + 'T00:00:00'))
@@ -114,7 +155,7 @@ export default function App() {
   }
 
   function closeAll() {
-    setEditEvent(null); setIsNewEvent(false); setPendingOpen(false); setCatModal(false)
+    setEditEvent(null); setIsNewEvent(false); setPendingOpen(false); setCatModal(false); setHabitSettings(false)
   }
 
   async function handleSave(patch: Partial<TimelineEvent> & { id?: string }) {
@@ -220,10 +261,13 @@ export default function App() {
     <>
       <Topbar
         pendingCount={pendingEvents.length}
+        habitIntegration={habitIntegration}
         onNewEvent={openNew}
         onPending={() => setPendingOpen(p => !p)}
         onCategories={() => setCatModal(c => !c)}
         onExport={handleExport}
+        onHabitSettings={() => { closeAll(); setHabitSettings(true) }}
+        onHabitSync={handleHabitSync}
         onPreset={handlePreset}
         activePreset={activePreset}
       />
@@ -235,6 +279,7 @@ export default function App() {
           birthdate={birthdate}
           categories={categories}
           events={events}
+          habits={habits}
           onPan={pan}
           onZoom={zoom}
           onEventClick={handleEventClick}
@@ -266,6 +311,14 @@ export default function App() {
           onCreate={handleCreateCat}
           onDelete={handleDeleteCat}
           onEditEvent={handleEditEventFromCat}
+        />
+
+        <HabitSettingsPanel
+          open={habitSettingsOpen}
+          integration={habitIntegration}
+          onClose={() => setHabitSettings(false)}
+          onSave={handleHabitSave}
+          onSync={handleHabitSync}
         />
       </div>
     </>

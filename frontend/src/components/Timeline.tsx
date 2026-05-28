@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { Category, TimelineEvent, ViewState } from '../types'
+import type { Category, Habit, TimelineEvent, ViewState } from '../types'
 import { useIsMobile } from '../hooks/useIsMobile'
 
 interface Props {
@@ -8,6 +8,7 @@ interface Props {
   birthdate: Date
   categories: Category[]
   events: TimelineEvent[]
+  habits: Habit[]
   onPan: (shiftMs: number) => void
   onZoom: (dy: number, ratio: number, w: number) => void
   onEventClick: (id: string) => void
@@ -70,7 +71,7 @@ function getGridDates(startT: number, endT: number) {
   return result
 }
 
-export function Timeline({ view, today, birthdate, categories, events, onPan, onZoom, onEventClick, onBackgroundClick }: Props) {
+export function Timeline({ view, today, birthdate, categories, events, habits, onPan, onZoom, onEventClick, onBackgroundClick }: Props) {
   const wrapRef   = useRef<HTMLDivElement>(null)
   const svgRef    = useRef<SVGSVGElement>(null)
   const dragRef   = useRef<{ prevX: number } | null>(null)
@@ -89,9 +90,10 @@ export function Timeline({ view, today, birthdate, categories, events, onPan, on
   }, [])
 
   const { w, h } = dims
-  const ZONE_W = isMobile ? 44 : 88
-  const PAD  = Math.max(isMobile ? 16 : 60, w * 0.04)
-  const TL_W = w - PAD * 2
+  const ZONE_W   = isMobile ? 44 : 60
+  const PAD      = Math.max(isMobile ? 16 : 120, w * 0.08)  // used for habits + axis labels
+  const EVT_PAD  = 0                                         // events render edge-to-edge
+  const TL_W     = w - PAD * 2
   const span = view.endMs - view.startMs
 
   const toX   = (t: number) => PAD + ((t - view.startMs) / span) * TL_W
@@ -174,7 +176,7 @@ export function Timeline({ view, today, birthdate, categories, events, onPan, on
     const mid   = (x1 + x2) / 2
     const col   = catById(ev.categoryId).color
     const hl    = !hlId || hlId === ev.id
-    if (x2 < PAD || x1 > w - PAD) return
+    if (x2 < EVT_PAD || x1 > w - EVT_PAD) return
 
     const sub = `${fmtDate(start)} – ${fmtDate(end)} · ${fmtDays(dur)}`
     pieces.push(`<g class="ev" data-id="${ev.id}" data-tip="${encodeURIComponent(JSON.stringify({ name: ev.name, sub }))}" style="cursor:pointer;opacity:${hl ? 1 : 0.15}">`)
@@ -198,11 +200,11 @@ export function Timeline({ view, today, birthdate, categories, events, onPan, on
       // End-only: arrow from left edge pointing toward end date
       const end    = new Date(ev.endDate)
       const endX   = dateX(end)
-      if (endX < PAD) return
-      const x2     = clamp(endX, PAD, w - PAD)
-      const x1     = PAD
+      if (endX < EVT_PAD) return
+      const x2     = clamp(endX, EVT_PAD, w - EVT_PAD)
+      const x1     = EVT_PAD
       const sub    = `Open · ends ${fmtDate(end)}`
-      const endsInView = endX <= w - PAD
+      const endsInView = endX <= w - EVT_PAD
       pieces.push(`<g class="ev" data-id="${ev.id}" data-tip="${encodeURIComponent(JSON.stringify({ name: ev.name, sub }))}" style="cursor:pointer;opacity:${hl ? 1 : 0.15}">`)
       pieces.push(`<polygon points="${x1 + 12},${y - 5} ${x1},${y} ${x1 + 12},${y + 5}" fill="${col}"/>`)
       pieces.push(`<line x1="${x1 + 12}" y1="${y}" x2="${x2}" y2="${y}" stroke="${col}" stroke-width="2"/>`)
@@ -222,13 +224,13 @@ export function Timeline({ view, today, birthdate, categories, events, onPan, on
 
     const start  = new Date(ev.startDate!)
     const startX = dateX(start)
-    const x1     = clamp(startX, PAD, w - PAD)
-    const x2     = w - PAD
+    const x1     = clamp(startX, EVT_PAD, w - EVT_PAD)
+    const x2     = w - EVT_PAD
     const sub    = `Open · started ${fmtDate(start)}`
 
-    if (startX > w - PAD) return
+    if (startX > w - EVT_PAD) return
 
-    const startsInView = startX >= PAD
+    const startsInView = startX >= EVT_PAD
     pieces.push(`<g class="ev" data-id="${ev.id}" data-tip="${encodeURIComponent(JSON.stringify({ name: ev.name, sub }))}" style="cursor:pointer;opacity:${hl ? 1 : 0.15}">`)
     if (startsInView) {
       pieces.push(`<line x1="${startX}" y1="${y}" x2="${startX}" y2="${AXIS_Y}" stroke="${col}" stroke-width="1" opacity="0.12"/>`)
@@ -251,7 +253,7 @@ export function Timeline({ view, today, birthdate, categories, events, onPan, on
   pinEvs.forEach(ev => {
     if (!ev.startDate) return
     const x = dateX(new Date(ev.startDate))
-    if (x >= PAD && x <= w - PAD) {
+    if (x >= EVT_PAD && x <= w - EVT_PAD) {
       pinCatCounts[ev.categoryId] = (pinCatCounts[ev.categoryId] ?? 0) + 1
     }
   })
@@ -260,7 +262,7 @@ export function Timeline({ view, today, birthdate, categories, events, onPan, on
   sortedPins.forEach((ev, i) => {
     if (!ev.startDate) return
     const x   = dateX(new Date(ev.startDate))
-    if (x < PAD || x > w - PAD) return
+    if (x < EVT_PAD || x > w - EVT_PAD) return
     const y   = PINS_Y + 16 + i * 26
     const col = catById(ev.categoryId).color
     const hl  = !hlId || hlId === ev.id
@@ -271,6 +273,69 @@ export function Timeline({ view, today, birthdate, categories, events, onPan, on
     pieces.push(`<circle cx="${x}" cy="${y}" r="4.5" fill="${col}"/>`)
     pieces.push(`<text x="${x + 9}" y="${y + 4}" fill="${col}" font-size="11" font-family="system-ui">${ev.name}</text>`)
     pieces.push(`</g>`)
+  })
+
+  // ── Habits ────────────────────────────────────────────────────────────────
+  const DAY_MS_LOCAL = DAY_MS
+  habits.forEach((habit, hi) => {
+    const y = HABITS_Y + 10 + hi * 22
+
+    // Name label (left of PAD, right-aligned)
+    const maxLabelW = ZONE_W - 6
+    const label = habit.name.length > 24 ? habit.name.slice(0, 23) + '…' : habit.name
+    pieces.push(`<text x="${PAD - 6}" y="${y + 4}" text-anchor="end" fill="#3a3a46" font-size="10" font-family="system-ui" clip-path="none">${label}</text>`)
+
+    // Daily circles
+    let doneCount = 0
+    let totalPast = 0
+    let streak = 0
+    let streakBroken = false
+
+    // Iterate from today backwards to count streak
+    const todayStr = today.toISOString().slice(0, 10)
+    const allDates = Object.keys(habit.logs).sort().reverse()
+    for (const d of allDates) {
+      if (d > todayStr) continue
+      if (habit.logs[d] === 'done') {
+        if (!streakBroken) streak++
+      } else {
+        streakBroken = true
+      }
+    }
+
+    // Draw circles for visible range
+    for (let t = view.startMs; t <= view.endMs; t += DAY_MS_LOCAL) {
+      const x = toX(t)
+      if (x < PAD + 2 || x > w - PAD - 2) continue
+
+      const d = new Date(t)
+      if (d > today) continue
+
+      const dateKey = d.toISOString().slice(0, 10)
+      const status  = habit.logs[dateKey]
+
+      if (dateKey <= todayStr) {
+        totalPast++
+        if (status === 'done') doneCount++
+      }
+
+      let fill: string
+      if (status === 'done') {
+        fill = habit.color
+      } else if (status === 'fail') {
+        fill = '#5a1818'
+      } else {
+        fill = '#252528'
+      }
+
+      pieces.push(`<circle cx="${x}" cy="${y}" r="3.5" fill="${fill}"/>`)
+    }
+
+    // Stats on right: streak + completion rate
+    const pct  = totalPast > 0 ? Math.round((doneCount / totalPast) * 100) : 0
+    const statsX = w - PAD + 6
+    const statsTxt = streak > 0 ? `🔥 ${streak} · ${pct}%` : `${pct}%`
+    pieces.push(`<text x="${statsX}" y="${y + 4}" fill="#3a3a46" font-size="10" font-family="system-ui">${statsTxt}</text>`)
   })
 
   const svgContent = pieces.join('\n')
