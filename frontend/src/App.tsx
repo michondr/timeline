@@ -32,7 +32,7 @@ export default function App() {
   const [activePreset, setActivePreset] = useState(12)
 
   const { view, setPreset, pan, zoom } = useTimelineView(TODAY)
-  const pendingEvents = events.filter(e => e.notifyForEnd && !e.endDate)
+  const pendingEvents = events.filter(e => e.notifyForEnd && (!e.startDate || !e.endDate))
 
   // ── Check stored token on mount ───────────────────────────────────────
   useEffect(() => {

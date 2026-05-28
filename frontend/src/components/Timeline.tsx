@@ -188,15 +188,42 @@ export function Timeline({ view, today, birthdate, categories, events, onPan, on
 
   // ── Open events (above axis, stacked) ────────────────────────────────────
   openEvs.forEach((ev, i) => {
-    if (!ev.startDate) return
-    const start  = new Date(ev.startDate)
+    if (!ev.startDate && !ev.endDate) return
+    const col    = catById(ev.categoryId).color
+    const hl     = !hlId || hlId === ev.id
     const y      = OPEN_Y + 10 + i * 38
+    const labelY = y - 8
+
+    if (!ev.startDate && ev.endDate) {
+      // End-only: arrow from left edge pointing toward end date
+      const end    = new Date(ev.endDate)
+      const endX   = dateX(end)
+      if (endX < PAD) return
+      const x2     = clamp(endX, PAD, w - PAD)
+      const x1     = PAD
+      const sub    = `Open · ends ${fmtDate(end)}`
+      const endsInView = endX <= w - PAD
+      pieces.push(`<g class="ev" data-id="${ev.id}" data-tip="${encodeURIComponent(JSON.stringify({ name: ev.name, sub }))}" style="cursor:pointer;opacity:${hl ? 1 : 0.15}">`)
+      pieces.push(`<polygon points="${x1 + 12},${y - 5} ${x1},${y} ${x1 + 12},${y + 5}" fill="${col}"/>`)
+      pieces.push(`<line x1="${x1 + 12}" y1="${y}" x2="${x2}" y2="${y}" stroke="${col}" stroke-width="2"/>`)
+      if (endsInView) {
+        pieces.push(`<circle cx="${endX}" cy="${y}" r="5" fill="${col}"/>`)
+        pieces.push(`<line x1="${endX}" y1="${y}" x2="${endX}" y2="${AXIS_Y}" stroke="${col}" stroke-width="1" opacity="0.12"/>`)
+      }
+      if (ev.notifyForEnd) {
+        pieces.push(`<text x="${x1 + 26}" y="${labelY + 1}" fill="#ff9f0a" font-size="11" font-family="system-ui">⚠</text>`)
+        pieces.push(`<text x="${x1 + 40}" y="${labelY}" fill="${col}" font-size="11" font-family="system-ui" font-weight="500">${ev.name}</text>`)
+      } else {
+        pieces.push(`<text x="${x1 + 26}" y="${labelY}" fill="${col}" font-size="11" font-family="system-ui" font-weight="500">${ev.name}</text>`)
+      }
+      pieces.push(`</g>`)
+      return
+    }
+
+    const start  = new Date(ev.startDate!)
     const startX = dateX(start)
     const x1     = clamp(startX, PAD, w - PAD)
     const x2     = w - PAD
-    const col    = catById(ev.categoryId).color
-    const hl     = !hlId || hlId === ev.id
-    const labelY = y - 8
     const sub    = `Open · started ${fmtDate(start)}`
 
     if (startX > w - PAD) return

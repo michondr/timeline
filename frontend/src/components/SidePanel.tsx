@@ -24,7 +24,7 @@ export function SidePanel({ event, categories, isNew, onClose, onSave, onDelete 
   useEffect(() => {
     if (event) {
       setName(event.name)
-      setType(event.type)
+      setType(event.type === 'open' ? 'range' : event.type)
       setCatId(event.categoryId)
       setStart(event.startDate ?? '')
       setEnd(event.endDate ?? '')
@@ -44,13 +44,19 @@ export function SidePanel({ event, categories, isNew, onClose, onSave, onDelete 
   const cat = categories.find(c => c.id === categoryId)
   const hidden = !event && !isNew
 
+  const missingStart = type === 'range' && !startDate && !!endDate
+  const showNotify   = type === 'range' && (!startDate || !endDate)
+  const notifyLabel  = missingStart ? 'Notify for start date' : 'Notify for end date'
+  const notifyHint   = missingStart ? 'Adds to pending list until start is filled in' : 'Adds to pending list until end is filled in'
+
   function handleSave() {
+    const derivedType: EventType = type === 'pin' ? 'pin' : (!startDate || !endDate) ? 'open' : 'range'
     onSave({
       id: event?.id,
-      name, type, categoryId,
+      name, type: derivedType, categoryId,
       startDate: startDate || null,
-      endDate:   endDate   || null,
-      notifyForEnd: notify,
+      endDate:   type === 'pin' ? null : endDate || null,
+      notifyForEnd: showNotify ? notify : false,
       note: note || null,
     })
   }
@@ -96,7 +102,7 @@ export function SidePanel({ event, categories, isNew, onClose, onSave, onDelete 
 
           <Field label="Type">
             <div style={{ display: 'flex', border: '1px solid var(--border)', borderRadius: 7, overflow: 'hidden' }}>
-              {(['range', 'open', 'pin'] as EventType[]).map(t => (
+              {(['range', 'pin'] as EventType[]).map(t => (
                 <button
                   key={t}
                   onClick={() => setType(t)}
@@ -123,15 +129,15 @@ export function SidePanel({ event, categories, isNew, onClose, onSave, onDelete 
             )}
           </div>
 
-          {type === 'open' && (
+          {showNotify && (
             <Field>
               <div style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                 background: 'var(--s2)', border: '1px solid var(--border)', borderRadius: 7, padding: '9px 11px', gap: 12,
               }}>
                 <div>
-                  <div style={{ fontSize: 13 }}>Notify for end date</div>
-                  <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>Adds to pending list until end is filled in</div>
+                  <div style={{ fontSize: 13 }}>{notifyLabel}</div>
+                  <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>{notifyHint}</div>
                 </div>
                 <div
                   onClick={() => setNotify(n => !n)}
