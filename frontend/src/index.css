@@ -2,6 +2,7 @@
   box-sizing: border-box;
   margin: 0;
   padding: 0;
+  -webkit-tap-highlight-color: transparent;
 }
 
 :root {
@@ -36,6 +37,12 @@ html, body, #root {
 button {
   cursor: pointer;
   font-family: inherit;
+  touch-action: manipulation;
+}
+
+@media (max-width: 639px) {
+  /* Prevent iOS Safari auto-zoom on input focus */
+  input, textarea, select { font-size: 16px !important; }
 }
 
 input, textarea, select {

@@ -1,4 +1,5 @@
 import type { Category, TimelineEvent } from '../types'
+import { useIsMobile } from '../hooks/useIsMobile'
 
 interface Props {
   events: TimelineEvent[]
@@ -15,12 +16,14 @@ function fmtDate(s: string) {
 }
 
 export function PendingPanel({ events, categories, open, onClose, onSelect }: Props) {
+  const isMobile = useIsMobile()
   const catById = (id: string) => categories.find(c => c.id === id)
 
   return (
     <aside style={{
-      position: 'absolute', right: 0, top: 0, bottom: 0, width: 360,
-      background: 'var(--surface)', borderLeft: '1px solid var(--border)',
+      position: 'absolute', right: 0, top: 0, bottom: 0,
+      width: isMobile ? '100%' : 360,
+      background: 'var(--surface)', borderLeft: isMobile ? 'none' : '1px solid var(--border)',
       boxShadow: '-8px 0 32px rgba(0,0,0,0.45)', zIndex: 25,
       display: 'flex', flexDirection: 'column',
       transform: open ? 'translateX(0)' : 'translateX(105%)',

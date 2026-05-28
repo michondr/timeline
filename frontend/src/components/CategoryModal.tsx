@@ -32,12 +32,13 @@ export function CategoryModal({ open, categories, onClose, onCreate, onDelete }:
       style={{
         position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
         zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: '16px',
         opacity: open ? 1 : 0, pointerEvents: open ? 'all' : 'none', transition: 'opacity 0.18s',
       }}
     >
       <div style={{
         background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12,
-        width: 440, maxHeight: '80vh', display: 'flex', flexDirection: 'column',
+        width: '100%', maxWidth: 440, maxHeight: '80vh', display: 'flex', flexDirection: 'column',
         boxShadow: '0 20px 60px rgba(0,0,0,0.6)',
         transform: open ? 'scale(1)' : 'scale(0.96)', transition: 'transform 0.18s',
       }}>

@@ -1,4 +1,5 @@
 import React from 'react'
+import { useIsMobile } from '../hooks/useIsMobile'
 
 interface Props {
   pendingCount: number
@@ -17,19 +18,66 @@ const PRESETS = [
   { label: 'decade', months: 120  },
 ]
 
+const logo = (
+  <div style={{ display: 'flex', alignItems: 'center', userSelect: 'none' }}>
+    <div style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--text)', flexShrink: 0 }} />
+    <div style={{ width: 16, height: 1.5, background: 'var(--muted)' }} />
+    <span style={{ fontSize: 14, fontWeight: 600, letterSpacing: '-0.3px', padding: '0 4px' }}>timeline</span>
+    <div style={{ width: 16, height: 1.5, background: 'var(--muted)' }} />
+    <div style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--text)', flexShrink: 0 }} />
+  </div>
+)
+
+const badge = (n: number) => (
+  <span style={{
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+    minWidth: 18, height: 18, padding: '0 5px', borderRadius: 9,
+    background: 'var(--warn)', color: '#000', fontSize: 10, fontWeight: 700,
+  }}>{n}</span>
+)
+
 export function Topbar({ pendingCount, onNewEvent, onPending, onCategories, onPreset, activePreset }: Props) {
+  const isMobile = useIsMobile()
+
+  if (isMobile) {
+    return (
+      <header style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)', flexShrink: 0, zIndex: 5 }}>
+        <div style={{ height: 48, display: 'flex', alignItems: 'center', padding: '0 14px', gap: 8 }}>
+          {logo}
+          <div style={{ flex: 1 }} />
+          {pendingCount > 0 && (
+            <button onClick={onPending} style={{ ...btnWarn, padding: '6px 10px', gap: 5 }}>
+              ⚠ {badge(pendingCount)}
+            </button>
+          )}
+          <button onClick={onCategories} style={{ ...btnGhost, padding: '6px 10px' }}>⊞</button>
+          <button onClick={onNewEvent} style={{ ...btnPrimary, padding: '6px 14px' }}>+ New</button>
+        </div>
+        <div style={{ height: 34, display: 'flex', alignItems: 'center', padding: '0 14px', borderTop: '1px solid var(--border)' }}>
+          <div style={{ display: 'flex', background: 'var(--s2)', border: '1px solid var(--border)', borderRadius: 7, overflow: 'hidden', flex: 1 }}>
+            {PRESETS.map(p => (
+              <button key={p.months} onClick={() => onPreset(p.months)} style={{
+                flex: 1, padding: '4px 0',
+                background: p.months === activePreset ? 'var(--s3)' : 'transparent',
+                border: 'none', borderRight: '1px solid var(--border)',
+                color: p.months === activePreset ? 'var(--text)' : 'var(--muted)',
+                fontSize: 11,
+              }}>
+                {p.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </header>
+    )
+  }
+
   return (
     <header style={{
       height: 52, background: 'var(--surface)', borderBottom: '1px solid var(--border)',
       display: 'flex', alignItems: 'center', padding: '0 20px', gap: 14, flexShrink: 0, zIndex: 5,
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', userSelect: 'none' }}>
-        <div style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--text)', flexShrink: 0 }} />
-        <div style={{ width: 16, height: 1.5, background: 'var(--muted)' }} />
-        <span style={{ fontSize: 14, fontWeight: 600, letterSpacing: '-0.3px', padding: '0 4px' }}>timeline</span>
-        <div style={{ width: 16, height: 1.5, background: 'var(--muted)' }} />
-        <div style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--text)', flexShrink: 0 }} />
-      </div>
+      {logo}
 
       <div style={{ width: 1, height: 18, background: 'var(--border)', flexShrink: 0 }} />
 
@@ -59,14 +107,7 @@ export function Topbar({ pendingCount, onNewEvent, onPending, onCategories, onPr
 
       {pendingCount > 0 && (
         <button onClick={onPending} style={btnWarn}>
-          ⚠ Pending{' '}
-          <span style={{
-            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-            minWidth: 18, height: 18, padding: '0 5px', borderRadius: 9,
-            background: 'var(--warn)', color: '#000', fontSize: 10, fontWeight: 700,
-          }}>
-            {pendingCount}
-          </span>
+          ⚠ Pending{' '}{badge(pendingCount)}
         </button>
       )}
 

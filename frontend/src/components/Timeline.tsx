@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Category, TimelineEvent, ViewState } from '../types'
+import { useIsMobile } from '../hooks/useIsMobile'
 
 interface Props {
   view: ViewState
@@ -75,6 +76,7 @@ export function Timeline({ view, today, birthdate, categories, events, onPan, on
   const [tooltip, setTooltip] = useState<{ x: number; y: number; content: string } | null>(null)
   const [hlId, setHlId]       = useState<string | null>(null)
   const [dims, setDims]       = useState({ w: 1200, h: 600 })
+  const isMobile  = useIsMobile()
 
   useEffect(() => {
     if (!wrapRef.current) return
@@ -86,7 +88,8 @@ export function Timeline({ view, today, birthdate, categories, events, onPan, on
   }, [])
 
   const { w, h } = dims
-  const PAD  = Math.max(60, w * 0.04)
+  const ZONE_W = isMobile ? 44 : 88
+  const PAD  = Math.max(isMobile ? 16 : 60, w * 0.04)
   const TL_W = w - PAD * 2
   const span = view.endMs - view.startMs
 
@@ -312,10 +315,85 @@ export function Timeline({ view, today, birthdate, categories, events, onPan, on
     }
   }
 
+  // ── Touch pan / pinch-zoom ────────────────────────────────────────────────
+  const touchStateRef = useRef<{
+    startX: number; prevX: number
+    prevDist: number | null
+    moved: boolean; startTarget: EventTarget | null
+  } | null>(null)
+
+  const latestRef = useRef({ TL_W, span, PAD, w, onPan, onZoom, onEventClick })
+  useEffect(() => { latestRef.current = { TL_W, span, PAD, w, onPan, onZoom, onEventClick } })
+
+  useEffect(() => {
+    const el = wrapRef.current
+    if (!el) return
+
+    function onTouchStart(e: TouchEvent) {
+      if (e.touches.length === 1) {
+        touchStateRef.current = { startX: e.touches[0].clientX, prevX: e.touches[0].clientX, prevDist: null, moved: false, startTarget: e.target }
+      } else if (e.touches.length === 2) {
+        const dx = e.touches[0].clientX - e.touches[1].clientX
+        const dy = e.touches[0].clientY - e.touches[1].clientY
+        touchStateRef.current = { startX: 0, prevX: 0, prevDist: Math.sqrt(dx * dx + dy * dy), moved: true, startTarget: null }
+      }
+    }
+
+    function onTouchMove(e: TouchEvent) {
+      const s = touchStateRef.current
+      if (!s) return
+      e.preventDefault()
+      const { TL_W: tlw, span: sp, PAD: pad, w: cw, onPan: pan, onZoom: zoom } = latestRef.current
+      if (e.touches.length === 1 && s.prevDist === null) {
+        const dx = s.prevX - e.touches[0].clientX
+        s.prevX = e.touches[0].clientX
+        if (Math.abs(e.touches[0].clientX - s.startX) > 5) s.moved = true
+        pan((dx / tlw) * sp)
+      } else if (e.touches.length === 2) {
+        const dx = e.touches[0].clientX - e.touches[1].clientX
+        const dy = e.touches[0].clientY - e.touches[1].clientY
+        const dist = Math.sqrt(dx * dx + dy * dy)
+        if (s.prevDist !== null) {
+          const delta = s.prevDist - dist
+          const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2
+          const rect = el.getBoundingClientRect()
+          const ratio = Math.max(0, Math.min(1, (midX - rect.left - pad) / tlw))
+          zoom(delta, ratio, cw)
+        }
+        s.prevDist = dist
+      }
+    }
+
+    function onTouchEnd() {
+      const s = touchStateRef.current
+      if (s && !s.moved && s.startTarget) {
+        let cur = s.startTarget as Element | null
+        while (cur) {
+          if (cur.classList?.contains('ev')) {
+            const id = (cur as SVGGElement).dataset?.id
+            if (id) latestRef.current.onEventClick(id)
+            break
+          }
+          cur = cur.parentElement
+        }
+      }
+      touchStateRef.current = null
+    }
+
+    el.addEventListener('touchstart', onTouchStart, { passive: true })
+    el.addEventListener('touchmove', onTouchMove, { passive: false })
+    el.addEventListener('touchend', onTouchEnd, { passive: true })
+    return () => {
+      el.removeEventListener('touchstart', onTouchStart)
+      el.removeEventListener('touchmove', onTouchMove)
+      el.removeEventListener('touchend', onTouchEnd)
+    }
+  }, []) // uses latestRef for live values
+
   return (
     <div style={{ flex: 1, display: 'flex', position: 'relative', overflow: 'hidden' }}>
       {/* Zone labels */}
-      <div style={{ width: 88, minWidth: 88, background: 'var(--surface)', borderRight: '1px solid var(--border)', position: 'relative', flexShrink: 0, zIndex: 1 }}>
+      <div style={{ width: ZONE_W, minWidth: ZONE_W, background: 'var(--surface)', borderRight: '1px solid var(--border)', position: 'relative', flexShrink: 0, zIndex: 1 }}>
         {zones.map(z => (
           <div key={z.label} style={{
             position: 'absolute', right: 10, fontSize: 9, fontWeight: 600, letterSpacing: '0.8px',
@@ -328,7 +406,7 @@ export function Timeline({ view, today, birthdate, categories, events, onPan, on
       {/* Timeline canvas */}
       <div
         ref={wrapRef}
-        style={{ flex: 1, position: 'relative', overflow: 'hidden', background: 'var(--bg)' }}
+        style={{ flex: 1, position: 'relative', overflow: 'hidden', background: 'var(--bg)', touchAction: 'none' }}
         onWheel={handleWheel}
       >
         <svg
@@ -341,13 +419,15 @@ export function Timeline({ view, today, birthdate, categories, events, onPan, on
           dangerouslySetInnerHTML={{ __html: svgContent }}
         />
 
-        {/* Keyboard hints */}
-        <div style={{ position: 'absolute', bottom: 13, right: 13, display: 'flex', gap: 12, fontSize: 11, color: 'var(--muted)', pointerEvents: 'none', userSelect: 'none' }}>
-          <span><kbd style={kbdStyle}>scroll</kbd> pan</span>
-          <span><kbd style={kbdStyle}>pinch</kbd> zoom</span>
-          <span><kbd style={kbdStyle}>N</kbd> new</span>
-          <span><kbd style={kbdStyle}>Esc</kbd> close</span>
-        </div>
+        {/* Keyboard hints — desktop only */}
+        {!isMobile && (
+          <div style={{ position: 'absolute', bottom: 13, right: 13, display: 'flex', gap: 12, fontSize: 11, color: 'var(--muted)', pointerEvents: 'none', userSelect: 'none' }}>
+            <span><kbd style={kbdStyle}>scroll</kbd> pan</span>
+            <span><kbd style={kbdStyle}>pinch</kbd> zoom</span>
+            <span><kbd style={kbdStyle}>N</kbd> new</span>
+            <span><kbd style={kbdStyle}>Esc</kbd> close</span>
+          </div>
+        )}
       </div>
 
       {/* Tooltip */}

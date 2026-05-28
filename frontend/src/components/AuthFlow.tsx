@@ -276,10 +276,10 @@ export function AuthFlow({ mode, onAuth }: Props) {
   return (
     <div style={{
       display: 'flex', alignItems: 'center', justifyContent: 'center',
-      height: '100%', background: 'var(--bg)',
+      height: '100%', background: 'var(--bg)', padding: '16px',
     }}>
       <div style={{
-        width: 380, background: 'var(--surface)', border: '1px solid var(--border)',
+        width: '100%', maxWidth: 380, background: 'var(--surface)', border: '1px solid var(--border)',
         borderRadius: 14, padding: '40px 36px 32px',
         display: 'flex', flexDirection: 'column', alignItems: 'center',
         boxShadow: '0 24px 64px rgba(0,0,0,0.5)',

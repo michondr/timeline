@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import type { Category, EventType, TimelineEvent } from '../types'
+import { useIsMobile } from '../hooks/useIsMobile'
 
 interface Props {
   event: TimelineEvent | null
@@ -11,6 +12,7 @@ interface Props {
 }
 
 export function SidePanel({ event, categories, isNew, onClose, onSave, onDelete }: Props) {
+  const isMobile = useIsMobile()
   const [name, setName]         = useState('')
   const [type, setType]         = useState<EventType>('range')
   const [categoryId, setCatId]  = useState('')
@@ -37,7 +39,7 @@ export function SidePanel({ event, categories, isNew, onClose, onSave, onDelete 
       setNotify(false)
       setNote('')
     }
-  }, [event, categories])
+  }, [event, categories, isNew])
 
   const cat = categories.find(c => c.id === categoryId)
   const hidden = !event && !isNew
@@ -55,8 +57,9 @@ export function SidePanel({ event, categories, isNew, onClose, onSave, onDelete 
 
   return (
     <aside style={{
-        position: 'absolute', right: 0, top: 0, bottom: 0, width: 380,
-        background: 'var(--surface)', borderLeft: '1px solid var(--border)',
+        position: 'absolute', right: 0, top: 0, bottom: 0,
+        width: isMobile ? '100%' : 380,
+        background: 'var(--surface)', borderLeft: isMobile ? 'none' : '1px solid var(--border)',
         boxShadow: '-8px 0 32px rgba(0,0,0,0.45)', zIndex: 20,
         display: 'flex', flexDirection: 'column',
         transform: hidden ? 'translateX(105%)' : 'translateX(0)',
