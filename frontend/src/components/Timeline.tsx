@@ -11,6 +11,7 @@ interface Props {
   onPan: (shiftMs: number) => void
   onZoom: (dy: number, ratio: number, w: number) => void
   onEventClick: (id: string) => void
+  onBackgroundClick: () => void
 }
 
 const DAY_MS = 86_400_000
@@ -69,7 +70,7 @@ function getGridDates(startT: number, endT: number) {
   return result
 }
 
-export function Timeline({ view, today, birthdate, categories, events, onPan, onZoom, onEventClick }: Props) {
+export function Timeline({ view, today, birthdate, categories, events, onPan, onZoom, onEventClick, onBackgroundClick }: Props) {
   const wrapRef   = useRef<HTMLDivElement>(null)
   const svgRef    = useRef<SVGSVGElement>(null)
   const dragRef   = useRef<{ prevX: number } | null>(null)
@@ -295,6 +296,7 @@ export function Timeline({ view, today, birthdate, categories, events, onPan, on
     if (dragRef.current) { dragRef.current = null; return }
     const g = getSvgTarget(e)
     if (g?.dataset.id) onEventClick(g.dataset.id)
+    else onBackgroundClick()
   }
 
   function handleMouseLeave() {
@@ -322,8 +324,8 @@ export function Timeline({ view, today, birthdate, categories, events, onPan, on
     moved: boolean; startTarget: EventTarget | null
   } | null>(null)
 
-  const latestRef = useRef({ TL_W, span, PAD, w, onPan, onZoom, onEventClick })
-  useEffect(() => { latestRef.current = { TL_W, span, PAD, w, onPan, onZoom, onEventClick } })
+  const latestRef = useRef({ TL_W, span, PAD, w, onPan, onZoom, onEventClick, onBackgroundClick })
+  useEffect(() => { latestRef.current = { TL_W, span, PAD, w, onPan, onZoom, onEventClick, onBackgroundClick } })
 
   useEffect(() => {
     const el = wrapRef.current
@@ -368,14 +370,17 @@ export function Timeline({ view, today, birthdate, categories, events, onPan, on
       const s = touchStateRef.current
       if (s && !s.moved && s.startTarget) {
         let cur = s.startTarget as Element | null
+        let found = false
         while (cur) {
           if (cur.classList?.contains('ev')) {
             const id = (cur as SVGGElement).dataset?.id
             if (id) latestRef.current.onEventClick(id)
+            found = true
             break
           }
           cur = cur.parentElement
         }
+        if (!found) latestRef.current.onBackgroundClick()
       }
       touchStateRef.current = null
     }

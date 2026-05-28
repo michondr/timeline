@@ -8,7 +8,7 @@ import { Topbar } from './components/Topbar'
 import { Timeline } from './components/Timeline'
 import { SidePanel } from './components/SidePanel'
 import { PendingPanel } from './components/PendingPanel'
-import { CategoryModal } from './components/CategoryModal'
+import { CategoryPanel } from './components/CategoryPanel'
 import { AuthFlow } from './components/AuthFlow'
 import type { DateFormat } from './components/AuthFlow'
 
@@ -86,12 +86,8 @@ export default function App() {
   // ── Keyboard shortcuts ────────────────────────────────────────────────
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (catModalOpen) {
-        if (e.key === 'Escape') setCatModal(false)
-        return
-      }
       if (e.key === 'Escape') {
-        setEditEvent(null); setIsNewEvent(false); setPendingOpen(false)
+        setEditEvent(null); setIsNewEvent(false); setPendingOpen(false); setCatModal(false)
         return
       }
       if ((e.key === 'n' || e.key === 'N') &&
@@ -111,6 +107,14 @@ export default function App() {
   function handleEventClick(id: string) {
     const ev = events.find(e => e.id === id)
     if (ev) { setEditEvent(ev); setIsNewEvent(false); setPendingOpen(false) }
+  }
+
+  function handleEditEventFromCat(ev: TimelineEvent) {
+    setEditEvent(ev); setIsNewEvent(false); setPendingOpen(false)
+  }
+
+  function closeAll() {
+    setEditEvent(null); setIsNewEvent(false); setPendingOpen(false); setCatModal(false)
   }
 
   async function handleSave(patch: Partial<TimelineEvent> & { id?: string }) {
@@ -174,8 +178,6 @@ export default function App() {
     setActivePreset(months); setPreset(months)
   }
 
-  const panelVisible = editEvent !== null || isNewEvent
-
   // ── Auth screens ──────────────────────────────────────────────────────
   if (phase === 'loading') {
     return (
@@ -199,8 +201,8 @@ export default function App() {
       <Topbar
         pendingCount={pendingEvents.length}
         onNewEvent={openNew}
-        onPending={() => { setPendingOpen(p => !p); setEditEvent(null); setIsNewEvent(false) }}
-        onCategories={() => setCatModal(true)}
+        onPending={() => setPendingOpen(p => !p)}
+        onCategories={() => setCatModal(c => !c)}
         onPreset={handlePreset}
         activePreset={activePreset}
       />
@@ -215,14 +217,8 @@ export default function App() {
           onPan={pan}
           onZoom={zoom}
           onEventClick={handleEventClick}
+          onBackgroundClick={closeAll}
         />
-
-        {(panelVisible || pendingOpen) && !catModalOpen && (
-          <div
-            style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.35)', zIndex: 15, cursor: 'pointer' }}
-            onClick={() => { setEditEvent(null); setIsNewEvent(false); setPendingOpen(false) }}
-          />
-        )}
 
         <SidePanel
           event={editEvent}
@@ -240,15 +236,17 @@ export default function App() {
           onClose={() => setPendingOpen(false)}
           onSelect={ev => { setEditEvent(ev); setIsNewEvent(false); setPendingOpen(false) }}
         />
-      </div>
 
-      <CategoryModal
-        open={catModalOpen}
-        categories={categories}
-        onClose={() => setCatModal(false)}
-        onCreate={handleCreateCat}
-        onDelete={handleDeleteCat}
-      />
+        <CategoryPanel
+          open={catModalOpen}
+          categories={categories}
+          events={events}
+          onClose={() => setCatModal(false)}
+          onCreate={handleCreateCat}
+          onDelete={handleDeleteCat}
+          onEditEvent={handleEditEventFromCat}
+        />
+      </div>
     </>
   )
 }
