@@ -414,6 +414,7 @@ export default function App() {
           onZoom={zoom}
           onEventClick={handleEventClick}
           onBackgroundClick={closeAll}
+          onDoubleTap={() => setFilterOpen(true)}
         />
 
         <SidePanel

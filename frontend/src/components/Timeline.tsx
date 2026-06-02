@@ -17,6 +17,7 @@ interface Props {
   onZoom: (dy: number, ratio: number, w: number) => void
   onEventClick: (id: string) => void
   onBackgroundClick: () => void
+  onDoubleTap: () => void
 }
 
 const DAY_MS = 86_400_000
@@ -75,7 +76,7 @@ function getGridDates(startT: number, endT: number) {
   return result
 }
 
-export function Timeline({ view, today, birthdate, categories, events, habits, showHabits, showBooks, hiddenCats, filterIds, onPan, onZoom, onEventClick, onBackgroundClick }: Props) {
+export function Timeline({ view, today, birthdate, categories, events, habits, showHabits, showBooks, hiddenCats, filterIds, onPan, onZoom, onEventClick, onBackgroundClick, onDoubleTap }: Props) {
   const wrapRef   = useRef<HTMLDivElement>(null)
   const svgRef    = useRef<SVGSVGElement>(null)
   const dragRef   = useRef<{ prevX: number } | null>(null)
@@ -466,8 +467,9 @@ export function Timeline({ view, today, birthdate, categories, events, habits, s
     moved: boolean; isVertical: boolean | null; startTarget: EventTarget | null
   } | null>(null)
 
-  const latestRef = useRef({ TL_W, span, PAD, w, onPan, onZoom, onEventClick, onBackgroundClick })
-  useEffect(() => { latestRef.current = { TL_W, span, PAD, w, onPan, onZoom, onEventClick, onBackgroundClick } })
+  const latestRef = useRef({ TL_W, span, PAD, w, onPan, onZoom, onEventClick, onBackgroundClick, onDoubleTap })
+  useEffect(() => { latestRef.current = { TL_W, span, PAD, w, onPan, onZoom, onEventClick, onBackgroundClick, onDoubleTap } })
+  const lastTapRef = useRef(0)
 
   useEffect(() => {
     const el = wrapRef.current
@@ -529,7 +531,17 @@ export function Timeline({ view, today, birthdate, categories, events, habits, s
           }
           cur = cur.parentElement
         }
-        if (!found) latestRef.current.onBackgroundClick()
+        if (!found) {
+          // Double-tap on empty space opens the filter (mobile equivalent of Space)
+          const now = Date.now()
+          if (now - lastTapRef.current < 300) {
+            lastTapRef.current = 0
+            latestRef.current.onDoubleTap()
+          } else {
+            lastTapRef.current = now
+            latestRef.current.onBackgroundClick()
+          }
+        }
       }
       touchStateRef.current = null
     }
