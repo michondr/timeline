@@ -162,35 +162,74 @@ export function Timeline({ view, today, birthdate, categories, events, habits, s
   pieces.push(`<circle cx="${todayX}" cy="${AXIS_Y}" r="4" fill="#ff3b30"/>`)
   pieces.push(`<text x="${todayX + 7}" y="40" fill="#ff3b30" font-size="11" font-family="system-ui" font-weight="500">today</text>`)
 
-  // ── Closed/Range events (above axis, duration → distance) ────────────────
-  const sortedRange = [...rangeEvs].sort((a, b) => {
-    const durA = a.startDate && a.endDate ? new Date(a.endDate).getTime() - new Date(a.startDate).getTime() : 0
-    const durB = b.startDate && b.endDate ? new Date(b.endDate).getTime() - new Date(b.startDate).getTime() : 0
-    return durB - durA
-  })
-  sortedRange.forEach(ev => {
-    if (!ev.startDate) return
+  // ── Closed/Range events: swimlanes grouped by category ───────────────────
+  // Each category gets its own vertical block above the axis. Within a category,
+  // events whose date ranges overlap are pushed onto separate lanes; the
+  // longest-lasting events settle into the top lanes.
+  type LaneItem = { ev: TimelineEvent; start: Date; end: Date; dur: number; lane: number }
+
+  const rangeByCat = new Map<string, LaneItem[]>()
+  for (const ev of rangeEvs) {
+    if (!ev.startDate) continue
     const start = new Date(ev.startDate)
     const end   = ev.endDate ? new Date(ev.endDate) : start
-    const dur   = end.getTime() - start.getTime()
-    const yOff  = 28 + Math.min(100, (dur / DAY_MS) * 1.4)
-    const y     = AXIS_Y - yOff
-    const x1    = dateX(start)
-    const x2    = Math.max(dateX(end), x1 + 18)
-    const mid   = (x1 + x2) / 2
-    const col   = catById(ev.categoryId).color
-    const hl    = !hlId || hlId === ev.id
-    if (x2 < EVT_PAD || x1 > w - EVT_PAD) return
+    const list  = rangeByCat.get(ev.categoryId) ?? []
+    list.push({ ev, start, end, dur: end.getTime() - start.getTime(), lane: 0 })
+    rangeByCat.set(ev.categoryId, list)
+  }
 
-    const sub = `${fmtDate(start)} – ${fmtDate(end)} · ${fmtDays(dur)}`
-    pieces.push(`<g class="ev" data-id="${ev.id}" data-tip="${encodeURIComponent(JSON.stringify({ name: ev.name, sub }))}" style="cursor:pointer;opacity:${hl ? 1 : 0.15}">`)
-    pieces.push(`<line x1="${x1}" y1="${y}" x2="${x1}" y2="${AXIS_Y}" stroke="${col}" stroke-width="1" opacity="0.12"/>`)
-    pieces.push(`<line x1="${x1}" y1="${y}" x2="${x2}" y2="${y}" stroke="${col}" stroke-width="2"/>`)
-    pieces.push(`<circle cx="${x1}" cy="${y}" r="5" fill="${col}"/>`)
-    pieces.push(`<circle cx="${x2}" cy="${y}" r="5" fill="${col}"/>`)
-    pieces.push(`<text x="${mid}" y="${y - 8}" text-anchor="middle" fill="${col}" font-size="11" font-family="system-ui" font-weight="500">${ev.name}</text>`)
-    pieces.push(`</g>`)
+  // Keep category order stable (follow the categories list, then any orphans)
+  const rangeCatOrder = [
+    ...categories.map(c => c.id).filter(id => rangeByCat.has(id)),
+    ...[...rangeByCat.keys()].filter(id => !categories.some(c => c.id === id)),
+  ]
+
+  // Assign lanes per category — greedy, longest first so long events take lane 0
+  const catBlocks = rangeCatOrder.map(catId => {
+    const items = rangeByCat.get(catId)!
+    items.sort((a, b) => b.dur - a.dur)
+    const laneEnds: number[] = []   // last occupied end-time per lane
+    for (const it of items) {
+      let lane = laneEnds.findIndex(endMs => endMs <= it.start.getTime())
+      if (lane === -1) { lane = laneEnds.length; laneEnds.push(0) }
+      laneEnds[lane] = it.end.getTime()
+      it.lane = lane
+    }
+    return { items, lanes: laneEnds.length }
   })
+
+  // Fit all lanes within the band between the open-event zone and the axis
+  const totalLanes = catBlocks.reduce((s, b) => s + b.lanes, 0)
+  const CAT_GAP  = 10
+  const BASE_OFF = 26
+  const bandTop  = Math.round(h * 0.12)
+  const avail    = Math.max(60, AXIS_Y - BASE_OFF - bandTop)
+  const LANE_H   = Math.max(12, Math.min(isMobile ? 18 : 22,
+                     (avail - catBlocks.length * CAT_GAP) / Math.max(1, totalLanes)))
+
+  let basePx = BASE_OFF   // pixels above the axis for this block's bottom lane
+  for (const block of catBlocks) {
+    for (const it of block.items) {
+      const laneFromBottom = block.lanes - 1 - it.lane   // lane 0 (longest) → top
+      const y   = AXIS_Y - (basePx + laneFromBottom * LANE_H)
+      const { ev, start, end, dur } = it
+      const x1  = dateX(start)
+      const x2  = Math.max(dateX(end), x1 + 18)
+      const mid = (x1 + x2) / 2
+      const col = catById(ev.categoryId).color
+      const hl  = !hlId || hlId === ev.id
+      if (x2 < EVT_PAD || x1 > w - EVT_PAD) continue
+
+      const sub = `${fmtDate(start)} – ${fmtDate(end)} · ${fmtDays(dur)}`
+      pieces.push(`<g class="ev" data-id="${ev.id}" data-tip="${encodeURIComponent(JSON.stringify({ name: ev.name, sub }))}" style="cursor:pointer;opacity:${hl ? 1 : 0.15}">`)
+      pieces.push(`<line x1="${x1}" y1="${y}" x2="${x2}" y2="${y}" stroke="${col}" stroke-width="2"/>`)
+      pieces.push(`<circle cx="${x1}" cy="${y}" r="4" fill="${col}"/>`)
+      pieces.push(`<circle cx="${x2}" cy="${y}" r="4" fill="${col}"/>`)
+      pieces.push(`<text x="${mid}" y="${y - 6}" text-anchor="middle" fill="${col}" font-size="10" font-family="system-ui" font-weight="500">${ev.name}</text>`)
+      pieces.push(`</g>`)
+    }
+    basePx += block.lanes * LANE_H + CAT_GAP
+  }
 
   // ── Open events (above axis, stacked) ────────────────────────────────────
   openEvs.forEach((ev, i) => {
