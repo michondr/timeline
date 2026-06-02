@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Category, Habit, HabitIntegration, TimelineEvent } from './types'
 import type { DerivedKeys } from './crypto'
 import { decryptField, encryptField } from './crypto'
@@ -10,6 +10,8 @@ import { SidePanel } from './components/SidePanel'
 import { PendingPanel } from './components/PendingPanel'
 import { CategoryPanel } from './components/CategoryPanel'
 import { HabitSettingsPanel } from './components/HabitSettingsPanel'
+import { FilterBar } from './components/FilterBar'
+import { applyFilter } from './filter'
 import { AuthFlow } from './components/AuthFlow'
 import type { DateFormat } from './components/AuthFlow'
 
@@ -36,14 +38,19 @@ export default function App() {
   const [catModalOpen, setCatModal]     = useState(false)
   const [activePreset, setActivePreset] = useState(12)
 
+  const [filterOpen, setFilterOpen]   = useState(false)
+  const [filterQuery, setFilterQuery] = useState('')
+
   const [lastCatId, setLastCatId]   = useState(() => localStorage.getItem('timeline_last_cat') ?? '')
   const [showHabits, setShowHabits] = useState(() => localStorage.getItem('timeline_show_habits') !== 'false')
   const [showBooks, setShowBooks]   = useState(() => localStorage.getItem('timeline_show_books') !== 'false')
 
   const habitFetchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const { view, setPreset, pan, zoom } = useTimelineView(TODAY)
+  const { view, setPreset, pan, zoom, fitRange } = useTimelineView(TODAY)
   const pendingEvents = events.filter(e => e.notifyForEnd && (!e.startDate || !e.endDate))
+
+  const filter = useMemo(() => applyFilter(filterQuery, events, categories), [filterQuery, events, categories])
 
   // ── Check stored token on mount ───────────────────────────────────────
   useEffect(() => {
@@ -140,22 +147,47 @@ export default function App() {
   // ── Keyboard shortcuts ────────────────────────────────────────────────
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
+      const tag = (e.target as HTMLElement).tagName
+      const typing = tag === 'INPUT' || tag === 'TEXTAREA'
       if (e.key === 'Escape') {
-        setEditEvent(null); setIsNewEvent(false); setPendingOpen(false); setCatModal(false)
+        setEditEvent(null); setIsNewEvent(false); setPendingOpen(false); setCatModal(false); setFilterOpen(false)
         return
       }
-      if ((e.key === 'n' || e.key === 'N') &&
-          (e.target as HTMLElement).tagName !== 'INPUT' &&
-          (e.target as HTMLElement).tagName !== 'TEXTAREA') {
+      if (e.key === ' ' && !typing && !filterOpen) {
+        e.preventDefault(); setFilterOpen(true)
+        return
+      }
+      if ((e.key === 'n' || e.key === 'N') && !typing) {
         openNew()
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [catModalOpen])
+  }, [catModalOpen, filterOpen])
 
   function openNew() {
     setEditEvent(null); setIsNewEvent(true); setPendingOpen(false)
+  }
+
+  // Zoom/pan the viewport so every matching event fits in view
+  function fitToFilter() {
+    const ids = filter.ids
+    if (!ids || ids.size === 0) return
+    let lo = Infinity, hi = -Infinity
+    for (const ev of events) {
+      if (!ids.has(ev.id)) continue
+      const s = ev.startDate ? new Date(ev.startDate + 'T00:00:00').getTime()
+              : ev.endDate   ? new Date(ev.endDate   + 'T00:00:00').getTime() : null
+      if (s == null) continue
+      const e = ev.endDate ? new Date(ev.endDate + 'T00:00:00').getTime() : s
+      lo = Math.min(lo, s, e); hi = Math.max(hi, s, e)
+    }
+    if (Number.isFinite(lo) && Number.isFinite(hi)) fitRange(lo, hi)
+  }
+
+  function closeFilter() {
+    setFilterOpen(false)
+    fitToFilter()
   }
 
   function handleEventClick(id: string) {
@@ -301,6 +333,7 @@ export default function App() {
           showBooks={showBooks}
           onToggleHabits={toggleHabits}
           onToggleBooks={toggleBooks}
+          filterIds={filter.ids}
           onPan={pan}
           onZoom={zoom}
           onEventClick={handleEventClick}
@@ -342,6 +375,38 @@ export default function App() {
           onSave={handleHabitSave}
           onSync={handleHabitSync}
         />
+
+        <FilterBar
+          open={filterOpen}
+          query={filterQuery}
+          error={filterQuery.trim() ? filter.error : null}
+          matched={filter.matched}
+          total={events.length}
+          categoryNames={categories.map(c => c.name)}
+          onChange={setFilterQuery}
+          onClose={closeFilter}
+          onClear={() => { setFilterQuery(''); setFilterOpen(false) }}
+        />
+
+        {filter.ids && !filterOpen && (
+          <button
+            onClick={() => setFilterOpen(true)}
+            style={{
+              position: 'absolute', left: 14, bottom: 14, zIndex: 15,
+              display: 'flex', alignItems: 'center', gap: 8,
+              background: 'var(--s3)', border: '1px solid var(--border)', borderRadius: 20,
+              color: 'var(--text)', fontSize: 12, padding: '6px 12px', cursor: 'pointer',
+              boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+            }}
+          >
+            <span style={{ color: 'var(--muted)' }}>filter:</span>
+            <span style={{ fontWeight: 500 }}>{filterQuery}</span>
+            <span
+              onClick={e => { e.stopPropagation(); setFilterQuery('') }}
+              style={{ color: 'var(--muted)', marginLeft: 2 }}
+            >✕</span>
+          </button>
+        )}
       </div>
     </>
   )

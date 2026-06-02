@@ -13,6 +13,7 @@ interface Props {
   showBooks: boolean
   onToggleHabits: () => void
   onToggleBooks: () => void
+  filterIds: Set<string> | null
   onPan: (shiftMs: number) => void
   onZoom: (dy: number, ratio: number, w: number) => void
   onEventClick: (id: string) => void
@@ -75,7 +76,7 @@ function getGridDates(startT: number, endT: number) {
   return result
 }
 
-export function Timeline({ view, today, birthdate, categories, events, habits, showHabits, showBooks, onToggleHabits, onToggleBooks, onPan, onZoom, onEventClick, onBackgroundClick }: Props) {
+export function Timeline({ view, today, birthdate, categories, events, habits, showHabits, showBooks, onToggleHabits, onToggleBooks, filterIds, onPan, onZoom, onEventClick, onBackgroundClick }: Props) {
   const wrapRef   = useRef<HTMLDivElement>(null)
   const svgRef    = useRef<SVGSVGElement>(null)
   const dragRef   = useRef<{ prevX: number } | null>(null)
@@ -112,6 +113,12 @@ export function Timeline({ view, today, birthdate, categories, events, habits, s
   function clamp(v: number, lo: number, hi: number) { return Math.max(lo, Math.min(hi, v)) }
 
   const catById = useCallback((id: string) => categories.find(c => c.id === id) ?? { id, name: id, color: '#888', isSystem: false, systemSlug: null }, [categories])
+
+  // Effective opacity: filtered-out events fade hard, otherwise honour hover highlight
+  const evOpacity = (id: string) => {
+    if (filterIds && !filterIds.has(id)) return 0.06
+    return !hlId || hlId === id ? 1 : 0.15
+  }
 
   // ── Split events by type ──────────────────────────────────────────────────
   const rangeEvs = events.filter(e => e.type === 'range')
@@ -217,11 +224,10 @@ export function Timeline({ view, today, birthdate, categories, events, habits, s
       const x2  = Math.max(dateX(end), x1 + 18)
       const mid = (x1 + x2) / 2
       const col = catById(ev.categoryId).color
-      const hl  = !hlId || hlId === ev.id
       if (x2 < EVT_PAD || x1 > w - EVT_PAD) continue
 
       const sub = `${fmtDate(start)} – ${fmtDate(end)} · ${fmtDays(dur)}`
-      pieces.push(`<g class="ev" data-id="${ev.id}" data-tip="${encodeURIComponent(JSON.stringify({ name: ev.name, sub }))}" style="cursor:pointer;opacity:${hl ? 1 : 0.15}">`)
+      pieces.push(`<g class="ev" data-id="${ev.id}" data-tip="${encodeURIComponent(JSON.stringify({ name: ev.name, sub }))}" style="cursor:pointer;opacity:${evOpacity(ev.id)}">`)
       pieces.push(`<line x1="${x1}" y1="${y}" x2="${x2}" y2="${y}" stroke="${col}" stroke-width="2"/>`)
       pieces.push(`<circle cx="${x1}" cy="${y}" r="4" fill="${col}"/>`)
       pieces.push(`<circle cx="${x2}" cy="${y}" r="4" fill="${col}"/>`)
@@ -235,7 +241,6 @@ export function Timeline({ view, today, birthdate, categories, events, habits, s
   openEvs.forEach((ev, i) => {
     if (!ev.startDate && !ev.endDate) return
     const col    = catById(ev.categoryId).color
-    const hl     = !hlId || hlId === ev.id
     const y      = OPEN_Y + 10 + i * 38
     const labelY = y - 8
 
@@ -248,7 +253,7 @@ export function Timeline({ view, today, birthdate, categories, events, habits, s
       const x1     = EVT_PAD
       const sub    = `Open · ends ${fmtDate(end)}`
       const endsInView = endX <= w - EVT_PAD
-      pieces.push(`<g class="ev" data-id="${ev.id}" data-tip="${encodeURIComponent(JSON.stringify({ name: ev.name, sub }))}" style="cursor:pointer;opacity:${hl ? 1 : 0.15}">`)
+      pieces.push(`<g class="ev" data-id="${ev.id}" data-tip="${encodeURIComponent(JSON.stringify({ name: ev.name, sub }))}" style="cursor:pointer;opacity:${evOpacity(ev.id)}">`)
       pieces.push(`<polygon points="${x1 + 12},${y - 5} ${x1},${y} ${x1 + 12},${y + 5}" fill="${col}"/>`)
       pieces.push(`<line x1="${x1 + 12}" y1="${y}" x2="${x2}" y2="${y}" stroke="${col}" stroke-width="2"/>`)
       if (endsInView) {
@@ -274,7 +279,7 @@ export function Timeline({ view, today, birthdate, categories, events, habits, s
     if (startX > w - EVT_PAD) return
 
     const startsInView = startX >= EVT_PAD
-    pieces.push(`<g class="ev" data-id="${ev.id}" data-tip="${encodeURIComponent(JSON.stringify({ name: ev.name, sub }))}" style="cursor:pointer;opacity:${hl ? 1 : 0.15}">`)
+    pieces.push(`<g class="ev" data-id="${ev.id}" data-tip="${encodeURIComponent(JSON.stringify({ name: ev.name, sub }))}" style="cursor:pointer;opacity:${evOpacity(ev.id)}">`)
     if (startsInView) {
       pieces.push(`<line x1="${startX}" y1="${y}" x2="${startX}" y2="${AXIS_Y}" stroke="${col}" stroke-width="1" opacity="0.12"/>`)
       pieces.push(`<circle cx="${startX}" cy="${y}" r="5" fill="${col}"/>`)
@@ -308,10 +313,9 @@ export function Timeline({ view, today, birthdate, categories, events, habits, s
     if (x < EVT_PAD || x > w - EVT_PAD) return
     const y   = PINS_Y + 16 + i * 26
     const col = catById(ev.categoryId).color
-    const hl  = !hlId || hlId === ev.id
     const sub = `Pin · ${fmtDate(new Date(ev.startDate))}`
 
-    pieces.push(`<g class="ev" data-id="${ev.id}" data-tip="${encodeURIComponent(JSON.stringify({ name: ev.name, sub }))}" style="cursor:pointer;opacity:${hl ? 1 : 0.15}">`)
+    pieces.push(`<g class="ev" data-id="${ev.id}" data-tip="${encodeURIComponent(JSON.stringify({ name: ev.name, sub }))}" style="cursor:pointer;opacity:${evOpacity(ev.id)}">`)
     pieces.push(`<line x1="${x}" y1="${AXIS_Y}" x2="${x}" y2="${y}" stroke="${col}" stroke-width="1.5" opacity="0.25"/>`)
     pieces.push(`<circle cx="${x}" cy="${y}" r="4.5" fill="${col}"/>`)
     pieces.push(`<text x="${x + 9}" y="${y + 4}" fill="${col}" font-size="11" font-family="system-ui">${ev.name}</text>`)

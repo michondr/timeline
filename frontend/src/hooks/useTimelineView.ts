@@ -22,6 +22,15 @@ export function useTimelineView(today: Date) {
     setView(prev => ({ startMs: prev.startMs + shiftMs, endMs: prev.endMs + shiftMs }))
   }, [])
 
+  const fitRange = useCallback((startMs: number, endMs: number) => {
+    if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) return
+    const MIN = 14 * DAY_MS
+    let lo = startMs, hi = endMs
+    if (hi - lo < MIN) { const c = (lo + hi) / 2; lo = c - MIN / 2; hi = c + MIN / 2 }
+    const pad = (hi - lo) * 0.08
+    setView({ startMs: lo - pad, endMs: hi + pad })
+  }, [])
+
   const zoom = useCallback((
     deltaY: number,
     mouseRatio: number,
@@ -37,5 +46,5 @@ export function useTimelineView(today: Date) {
     })
   }, [])
 
-  return { view, setView, setPreset, pan, zoom }
+  return { view, setView, setPreset, pan, zoom, fitRange }
 }
