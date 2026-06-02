@@ -6,12 +6,13 @@ interface Props {
   event: TimelineEvent | null
   categories: Category[]
   isNew: boolean
+  defaultCategoryId: string
   onClose: () => void
   onSave: (patch: Partial<TimelineEvent> & { id?: string }) => void
   onDelete: (id: string) => void
 }
 
-export function SidePanel({ event, categories, isNew, onClose, onSave, onDelete }: Props) {
+export function SidePanel({ event, categories, isNew, defaultCategoryId, onClose, onSave, onDelete }: Props) {
   const isMobile = useIsMobile()
   const [name, setName]         = useState('')
   const [type, setType]         = useState<EventType>('range')
@@ -33,13 +34,14 @@ export function SidePanel({ event, categories, isNew, onClose, onSave, onDelete 
     } else {
       setName('')
       setType('range')
-      setCatId(categories[0]?.id ?? '')
+      const fallback = categories.find(c => c.id === defaultCategoryId) ? defaultCategoryId : categories[0]?.id ?? ''
+      setCatId(fallback)
       setStart('')
       setEnd('')
       setNotify(false)
       setNote('')
     }
-  }, [event, categories, isNew])
+  }, [event, categories, isNew, defaultCategoryId])
 
   const cat = categories.find(c => c.id === categoryId)
   const hidden = !event && !isNew

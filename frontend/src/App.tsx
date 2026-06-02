@@ -36,6 +36,10 @@ export default function App() {
   const [catModalOpen, setCatModal]     = useState(false)
   const [activePreset, setActivePreset] = useState(12)
 
+  const [lastCatId, setLastCatId]   = useState(() => localStorage.getItem('timeline_last_cat') ?? '')
+  const [showHabits, setShowHabits] = useState(() => localStorage.getItem('timeline_show_habits') !== 'false')
+  const [showBooks, setShowBooks]   = useState(() => localStorage.getItem('timeline_show_books') !== 'false')
+
   const habitFetchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const { view, setPreset, pan, zoom } = useTimelineView(TODAY)
@@ -86,6 +90,7 @@ export default function App() {
   // ── Load habits when view changes (debounced) ─────────────────────────
   useEffect(() => {
     if (phase !== 'ready') return
+    if (!showHabits) { setHabits([]); return }
     if (habitFetchTimer.current) clearTimeout(habitFetchTimer.current)
     habitFetchTimer.current = setTimeout(async () => {
       try {
@@ -95,13 +100,21 @@ export default function App() {
         setHabits(raw.map(h => ({ ...h, logs: h.logs ?? {} })))
       } catch { /* silently ignore — no habits yet */ }
     }, 300)
-  }, [phase, view.startMs, view.endMs])
+  }, [phase, view.startMs, view.endMs, showHabits])
 
   // ── Load integration status once on ready ─────────────────────────────
   useEffect(() => {
     if (phase !== 'ready') return
     api.fetchHabitIntegration().then(setHabitIntegration).catch(() => {})
   }, [phase])
+
+  function toggleHabits() {
+    setShowHabits(v => { const nv = !v; localStorage.setItem('timeline_show_habits', String(nv)); return nv })
+  }
+
+  function toggleBooks() {
+    setShowBooks(v => { const nv = !v; localStorage.setItem('timeline_show_books', String(nv)); return nv })
+  }
 
   async function handleHabitSave(token: string) {
     await api.saveHabitToken(token)
@@ -160,6 +173,10 @@ export default function App() {
 
   async function handleSave(patch: Partial<TimelineEvent> & { id?: string }) {
     if (!encKey) return
+    if (patch.categoryId) {
+      setLastCatId(patch.categoryId)
+      localStorage.setItem('timeline_last_cat', patch.categoryId)
+    }
     const encName = await encryptField(encKey, patch.name ?? '')
     const encNote = patch.note ? await encryptField(encKey, patch.note) : null
 
@@ -280,6 +297,10 @@ export default function App() {
           categories={categories}
           events={events}
           habits={habits}
+          showHabits={showHabits}
+          showBooks={showBooks}
+          onToggleHabits={toggleHabits}
+          onToggleBooks={toggleBooks}
           onPan={pan}
           onZoom={zoom}
           onEventClick={handleEventClick}
@@ -290,6 +311,7 @@ export default function App() {
           event={editEvent}
           categories={categories}
           isNew={isNewEvent}
+          defaultCategoryId={lastCatId}
           onClose={() => { setEditEvent(null); setIsNewEvent(false) }}
           onSave={handleSave}
           onDelete={handleDelete}

@@ -9,6 +9,10 @@ interface Props {
   categories: Category[]
   events: TimelineEvent[]
   habits: Habit[]
+  showHabits: boolean
+  showBooks: boolean
+  onToggleHabits: () => void
+  onToggleBooks: () => void
   onPan: (shiftMs: number) => void
   onZoom: (dy: number, ratio: number, w: number) => void
   onEventClick: (id: string) => void
@@ -71,7 +75,7 @@ function getGridDates(startT: number, endT: number) {
   return result
 }
 
-export function Timeline({ view, today, birthdate, categories, events, habits, onPan, onZoom, onEventClick, onBackgroundClick }: Props) {
+export function Timeline({ view, today, birthdate, categories, events, habits, showHabits, showBooks, onToggleHabits, onToggleBooks, onPan, onZoom, onEventClick, onBackgroundClick }: Props) {
   const wrapRef   = useRef<HTMLDivElement>(null)
   const svgRef    = useRef<SVGSVGElement>(null)
   const dragRef   = useRef<{ prevX: number } | null>(null)
@@ -277,7 +281,7 @@ export function Timeline({ view, today, birthdate, categories, events, habits, o
 
   // ── Habits ────────────────────────────────────────────────────────────────
   const DAY_MS_LOCAL = DAY_MS
-  habits.forEach((habit, hi) => {
+  if (showHabits) habits.forEach((habit, hi) => {
     const y = HABITS_Y + 10 + hi * 22
 
     // Name label (left of PAD, right-aligned)
@@ -341,12 +345,12 @@ export function Timeline({ view, today, birthdate, categories, events, habits, o
   const svgContent = pieces.join('\n')
 
   // ── Zone labels ───────────────────────────────────────────────────────────
-  const zones = [
+  const zones: { label: string; top: number; checked?: boolean; onToggle?: () => void }[] = [
     { label: 'open',   top: OPEN_Y + 12 },
     { label: 'axis',   top: AXIS_Y },
     { label: 'pins',   top: PINS_Y + 42 },
-    { label: 'habits', top: HABITS_Y + 30 },
-    { label: 'books',  top: BOOKS_Y + 28 },
+    { label: 'habits', top: HABITS_Y + 30, checked: showHabits, onToggle: onToggleHabits },
+    { label: 'books',  top: BOOKS_Y + 28, checked: showBooks,  onToggle: onToggleBooks },
   ]
 
   // ── Event handlers on SVG ─────────────────────────────────────────────────
@@ -503,10 +507,23 @@ export function Timeline({ view, today, birthdate, categories, events, habits, o
       <div style={{ width: ZONE_W, minWidth: ZONE_W, background: 'var(--surface)', borderRight: '1px solid var(--border)', position: 'relative', flexShrink: 0, zIndex: 1 }}>
         {zones.map(z => (
           <div key={z.label} style={{
-            position: 'absolute', right: 10, fontSize: 9, fontWeight: 600, letterSpacing: '0.8px',
-            textTransform: 'uppercase', color: 'var(--muted)', transform: 'translateY(-50%)',
-            userSelect: 'none', top: z.top,
-          }}>{z.label}</div>
+            position: 'absolute', right: 10, top: z.top, transform: 'translateY(-50%)',
+            display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3, userSelect: 'none',
+          }}>
+            <div style={{
+              fontSize: 9, fontWeight: 600, letterSpacing: '0.8px',
+              textTransform: 'uppercase', color: 'var(--muted)',
+            }}>{z.label}</div>
+            {z.onToggle && (
+              <input
+                type="checkbox"
+                checked={z.checked}
+                onChange={z.onToggle}
+                title={z.checked ? `Hide ${z.label}` : `Show ${z.label}`}
+                style={{ width: 12, height: 12, cursor: 'pointer', accentColor: 'var(--accent)', margin: 0 }}
+              />
+            )}
+          </div>
         ))}
       </div>
 
