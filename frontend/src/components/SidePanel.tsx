@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import type { Category, EventType, TimelineEvent } from '../types'
 import { useIsMobile } from '../hooks/useIsMobile'
 
@@ -14,6 +14,7 @@ interface Props {
 
 export function SidePanel({ event, categories, isNew, defaultCategoryId, onClose, onSave, onDelete }: Props) {
   const isMobile = useIsMobile()
+  const nameRef                 = useRef<HTMLInputElement>(null)
   const [name, setName]         = useState('')
   const [type, setType]         = useState<EventType>('range')
   const [categoryId, setCatId]  = useState('')
@@ -42,6 +43,11 @@ export function SidePanel({ event, categories, isNew, defaultCategoryId, onClose
       setNote('')
     }
   }, [event, categories, isNew, defaultCategoryId])
+
+  // Focus the name field when the panel opens for a brand-new event
+  useEffect(() => {
+    if (isNew && !event) { const t = setTimeout(() => nameRef.current?.focus(), 80); return () => clearTimeout(t) }
+  }, [isNew, event])
 
   const cat = categories.find(c => c.id === categoryId)
   const hidden = !event && !isNew
@@ -91,7 +97,7 @@ export function SidePanel({ event, categories, isNew, defaultCategoryId, onClose
         {/* Body */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '14px 18px' }}>
           <Field label="Name">
-            <input className="fi" value={name} onChange={e => setName(e.target.value)} style={fiStyle} />
+            <input ref={nameRef} className="fi" value={name} onChange={e => setName(e.target.value)} style={fiStyle} />
           </Field>
 
           <Field label="Category">

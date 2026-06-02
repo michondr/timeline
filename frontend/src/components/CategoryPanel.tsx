@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Category, TimelineEvent } from '../types'
 import { useIsMobile } from '../hooks/useIsMobile'
 
@@ -6,6 +6,8 @@ interface Props {
   open: boolean
   categories: Category[]
   events: TimelineEvent[]
+  autoFocusNew?: boolean
+  expandId?: string | null
   onClose: () => void
   onCreate: (name: string, color: string) => void
   onDelete: (id: string) => void
@@ -25,11 +27,19 @@ function fmtDate(s: string | null) {
   return `${MONTH[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`
 }
 
-export function CategoryPanel({ open, categories, events, onClose, onCreate, onDelete, onEditEvent }: Props) {
+export function CategoryPanel({ open, categories, events, autoFocusNew, expandId, onClose, onCreate, onDelete, onEditEvent }: Props) {
   const isMobile = useIsMobile()
   const [expanded, setExpanded] = useState<string | null>(null)
   const [newName, setNewName]   = useState('')
   const [swatch, setSwatch]     = useState(SWATCHES[0])
+  const nameRef = useRef<HTMLInputElement>(null)
+
+  // When opened via a command: expand the requested category / focus the new-name input
+  useEffect(() => {
+    if (!open) return
+    if (expandId) setExpanded(expandId)
+    if (autoFocusNew) { const t = setTimeout(() => nameRef.current?.focus(), 80); return () => clearTimeout(t) }
+  }, [open, expandId, autoFocusNew])
 
   function countFor(id: string) {
     return events.filter(e => e.categoryId === id).length
@@ -179,6 +189,7 @@ export function CategoryPanel({ open, categories, events, onClose, onCreate, onD
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <input
+            ref={nameRef}
             value={newName}
             onChange={e => setNewName(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && handleCreate()}

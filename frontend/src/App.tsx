@@ -41,16 +41,25 @@ export default function App() {
   const [filterOpen, setFilterOpen]   = useState(false)
   const [filterQuery, setFilterQuery] = useState('')
 
+  const [catAutoFocusNew, setCatAutoFocusNew] = useState(false)
+  const [catExpandId, setCatExpandId]         = useState<string | null>(null)
+
   const [lastCatId, setLastCatId]   = useState(() => localStorage.getItem('timeline_last_cat') ?? '')
   const [showHabits, setShowHabits] = useState(() => localStorage.getItem('timeline_show_habits') !== 'false')
   const [showBooks, setShowBooks]   = useState(() => localStorage.getItem('timeline_show_books') !== 'false')
+  const [hiddenCats, setHiddenCats] = useState<Set<string>>(
+    () => new Set<string>(JSON.parse(localStorage.getItem('timeline_hidden_cats') ?? '[]')))
 
   const habitFetchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const { view, setPreset, pan, zoom, fitRange } = useTimelineView(TODAY)
   const pendingEvents = events.filter(e => e.notifyForEnd && (!e.startDate || !e.endDate))
 
-  const filter = useMemo(() => applyFilter(filterQuery, events, categories), [filterQuery, events, categories])
+  // A query starting with new/edit/toggle is a command, not a filter → no live dimming
+  const commandLike = /^\s*(new|edit|toggle)\b/i.test(filterQuery)
+  const filter = useMemo(
+    () => commandLike ? { ids: null, error: null, matched: 0 } : applyFilter(filterQuery, events, categories),
+    [filterQuery, events, categories, commandLike])
 
   // ── Check stored token on mount ───────────────────────────────────────
   useEffect(() => {
@@ -115,12 +124,29 @@ export default function App() {
     api.fetchHabitIntegration().then(setHabitIntegration).catch(() => {})
   }, [phase])
 
-  function toggleHabits() {
-    setShowHabits(v => { const nv = !v; localStorage.setItem('timeline_show_habits', String(nv)); return nv })
+  // ── Visibility controls ───────────────────────────────────────────────
+  function setHabitsVis(v: boolean) { setShowHabits(v); localStorage.setItem('timeline_show_habits', String(v)) }
+  function setBooksVis(v: boolean)  { setShowBooks(v);  localStorage.setItem('timeline_show_books',  String(v)) }
+
+  function persistHidden(s: Set<string>) { localStorage.setItem('timeline_hidden_cats', JSON.stringify([...s])) }
+
+  function toggleCatVis(id: string) {
+    setHiddenCats(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      persistHidden(next)
+      return next
+    })
   }
 
-  function toggleBooks() {
-    setShowBooks(v => { const nv = !v; localStorage.setItem('timeline_show_books', String(nv)); return nv })
+  function showAllCats() {
+    const empty = new Set<string>(); setHiddenCats(empty); persistHidden(empty)
+    setHabitsVis(true); setBooksVis(true)
+  }
+
+  function hideAllCats() {
+    const all = new Set(categories.map(c => c.id)); setHiddenCats(all); persistHidden(all)
+    setHabitsVis(false); setBooksVis(false)
   }
 
   async function handleHabitSave(token: string) {
@@ -156,9 +182,6 @@ export default function App() {
       if (e.key === ' ' && !typing && !filterOpen) {
         e.preventDefault(); setFilterOpen(true)
         return
-      }
-      if ((e.key === 'n' || e.key === 'N') && !typing) {
-        openNew()
       }
     }
     window.addEventListener('keydown', onKey)
@@ -197,6 +220,60 @@ export default function App() {
 
   function handleEditEventFromCat(ev: TimelineEvent) {
     setEditEvent(ev); setIsNewEvent(false); setPendingOpen(false)
+  }
+
+  // ── Command palette dispatch (keywords typed in the filter input) ──────
+  function matchByName<T extends { name: string }>(name: string, items: T[]): T | undefined {
+    const q = name.trim().toLowerCase()
+    if (!q) return undefined
+    return items.find(i => i.name.toLowerCase() === q)
+        ?? items.find(i => i.name.toLowerCase().startsWith(q))
+        ?? items.find(i => i.name.toLowerCase().includes(q))
+  }
+
+  function openNewCategory() {
+    closeAll(); setCatExpandId(null); setCatAutoFocusNew(true); setCatModal(true)
+  }
+
+  function openEditCategory(cat: Category) {
+    closeAll(); setCatAutoFocusNew(false); setCatExpandId(cat.id); setCatModal(true)
+  }
+
+  // Returns true if the query was a recognised command (executed), false → treat as filter
+  function runQuery(raw: string): void {
+    const q  = raw.trim()
+    const lc = q.toLowerCase()
+
+    if (lc === 'new' || lc === 'new event') { setFilterOpen(false); setFilterQuery(''); openNew(); return }
+    if (lc === 'new category' || lc === 'new cat') { setFilterOpen(false); setFilterQuery(''); openNewCategory(); return }
+
+    // toggle visibility — keep the palette open so several can be flipped in a row
+    const mTog = q.match(/^toggle\s+(?:category\s+)?(.+)$/i)
+    if (mTog) {
+      const tl = mTog[1].trim().toLowerCase()
+      if (tl === 'habits' || tl === 'habit') { setHabitsVis(!showHabits); setFilterQuery(''); return }
+      if (tl === 'books'  || tl === 'book')  { setBooksVis(!showBooks);   setFilterQuery(''); return }
+      const cat = matchByName(mTog[1].trim(), categories)
+      if (cat) { toggleCatVis(cat.id); setFilterQuery('') }
+      return
+    }
+
+    const mCat = q.match(/^edit\s+category\s+(.+)$/i)
+    if (mCat) {
+      const cat = matchByName(mCat[1], categories)
+      if (cat) { setFilterOpen(false); setFilterQuery(''); openEditCategory(cat) }
+      return
+    }
+    const mEdit = q.match(/^edit\s+(.+)$/i)
+    if (mEdit) {
+      const ev = matchByName(mEdit[1], events)
+      if (ev) { setFilterOpen(false); setFilterQuery(''); handleEventClick(ev.id); return }
+      const cat = matchByName(mEdit[1], categories)
+      if (cat) { setFilterOpen(false); setFilterQuery(''); openEditCategory(cat); return }
+      return   // no match → leave palette open so the user can adjust
+    }
+
+    closeFilter()   // not a command → apply filter + fit
   }
 
   function closeAll() {
@@ -313,7 +390,7 @@ export default function App() {
         habitIntegration={habitIntegration}
         onNewEvent={openNew}
         onPending={() => setPendingOpen(p => !p)}
-        onCategories={() => setCatModal(c => !c)}
+        onCategories={() => { setCatAutoFocusNew(false); setCatExpandId(null); setCatModal(c => !c) }}
         onExport={handleExport}
         onHabitSettings={() => { closeAll(); setHabitSettings(true) }}
         onHabitSync={handleHabitSync}
@@ -331,8 +408,7 @@ export default function App() {
           habits={habits}
           showHabits={showHabits}
           showBooks={showBooks}
-          onToggleHabits={toggleHabits}
-          onToggleBooks={toggleBooks}
+          hiddenCats={hiddenCats}
           filterIds={filter.ids}
           onPan={pan}
           onZoom={zoom}
@@ -362,7 +438,9 @@ export default function App() {
           open={catModalOpen}
           categories={categories}
           events={events}
-          onClose={() => setCatModal(false)}
+          autoFocusNew={catAutoFocusNew}
+          expandId={catExpandId}
+          onClose={() => { setCatModal(false); setCatAutoFocusNew(false); setCatExpandId(null) }}
           onCreate={handleCreateCat}
           onDelete={handleDeleteCat}
           onEditEvent={handleEditEventFromCat}
@@ -379,13 +457,25 @@ export default function App() {
         <FilterBar
           open={filterOpen}
           query={filterQuery}
-          error={filterQuery.trim() ? filter.error : null}
+          error={commandLike || !filterQuery.trim() ? null : filter.error}
           matched={filter.matched}
           total={events.length}
-          categoryNames={categories.map(c => c.name)}
+          events={events}
+          categories={categories}
+          hiddenCats={hiddenCats}
+          showHabits={showHabits}
+          showBooks={showBooks}
+          activePreset={activePreset}
           onChange={setFilterQuery}
-          onClose={closeFilter}
+          onSubmit={runQuery}
+          onClose={() => setFilterOpen(false)}
           onClear={() => { setFilterQuery(''); setFilterOpen(false) }}
+          onToggleCat={toggleCatVis}
+          onSetHabits={setHabitsVis}
+          onSetBooks={setBooksVis}
+          onShowAll={showAllCats}
+          onHideAll={hideAllCats}
+          onPreset={handlePreset}
         />
 
         {filter.ids && !filterOpen && (

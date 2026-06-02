@@ -11,8 +11,7 @@ interface Props {
   habits: Habit[]
   showHabits: boolean
   showBooks: boolean
-  onToggleHabits: () => void
-  onToggleBooks: () => void
+  hiddenCats: Set<string>
   filterIds: Set<string> | null
   onPan: (shiftMs: number) => void
   onZoom: (dy: number, ratio: number, w: number) => void
@@ -76,7 +75,7 @@ function getGridDates(startT: number, endT: number) {
   return result
 }
 
-export function Timeline({ view, today, birthdate, categories, events, habits, showHabits, showBooks, onToggleHabits, onToggleBooks, filterIds, onPan, onZoom, onEventClick, onBackgroundClick }: Props) {
+export function Timeline({ view, today, birthdate, categories, events, habits, showHabits, showBooks, hiddenCats, filterIds, onPan, onZoom, onEventClick, onBackgroundClick }: Props) {
   const wrapRef   = useRef<HTMLDivElement>(null)
   const svgRef    = useRef<SVGSVGElement>(null)
   const dragRef   = useRef<{ prevX: number } | null>(null)
@@ -120,10 +119,11 @@ export function Timeline({ view, today, birthdate, categories, events, habits, s
     return !hlId || hlId === id ? 1 : 0.15
   }
 
-  // ── Split events by type ──────────────────────────────────────────────────
-  const rangeEvs = events.filter(e => e.type === 'range')
-  const openEvs  = events.filter(e => e.type === 'open')
-  const pinEvs   = events.filter(e => e.type === 'pin')
+  // ── Split events by type (hidden categories removed entirely) ─────────────
+  const visEvents = hiddenCats.size ? events.filter(e => !hiddenCats.has(e.categoryId)) : events
+  const rangeEvs = visEvents.filter(e => e.type === 'range')
+  const openEvs  = visEvents.filter(e => e.type === 'open')
+  const pinEvs   = visEvents.filter(e => e.type === 'pin')
 
   // ── Build SVG strings ─────────────────────────────────────────────────────
   const grid = getGridDates(view.startMs, view.endMs)
@@ -388,12 +388,12 @@ export function Timeline({ view, today, birthdate, categories, events, habits, s
   const svgContent = pieces.join('\n')
 
   // ── Zone labels ───────────────────────────────────────────────────────────
-  const zones: { label: string; top: number; checked?: boolean; onToggle?: () => void }[] = [
+  const zones = [
     { label: 'open',   top: OPEN_Y + 12 },
     { label: 'axis',   top: AXIS_Y },
     { label: 'pins',   top: PINS_Y + 42 },
-    { label: 'habits', top: HABITS_Y + 30, checked: showHabits, onToggle: onToggleHabits },
-    { label: 'books',  top: BOOKS_Y + 28, checked: showBooks,  onToggle: onToggleBooks },
+    { label: 'habits', top: HABITS_Y + 30 },
+    { label: 'books',  top: BOOKS_Y + 28 },
   ]
 
   // ── Event handlers on SVG ─────────────────────────────────────────────────
@@ -550,23 +550,10 @@ export function Timeline({ view, today, birthdate, categories, events, habits, s
       <div style={{ width: ZONE_W, minWidth: ZONE_W, background: 'var(--surface)', borderRight: '1px solid var(--border)', position: 'relative', flexShrink: 0, zIndex: 1 }}>
         {zones.map(z => (
           <div key={z.label} style={{
-            position: 'absolute', right: 10, top: z.top, transform: 'translateY(-50%)',
-            display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3, userSelect: 'none',
-          }}>
-            <div style={{
-              fontSize: 9, fontWeight: 600, letterSpacing: '0.8px',
-              textTransform: 'uppercase', color: 'var(--muted)',
-            }}>{z.label}</div>
-            {z.onToggle && (
-              <input
-                type="checkbox"
-                checked={z.checked}
-                onChange={z.onToggle}
-                title={z.checked ? `Hide ${z.label}` : `Show ${z.label}`}
-                style={{ width: 12, height: 12, cursor: 'pointer', accentColor: 'var(--accent)', margin: 0 }}
-              />
-            )}
-          </div>
+            position: 'absolute', right: 10, fontSize: 9, fontWeight: 600, letterSpacing: '0.8px',
+            textTransform: 'uppercase', color: 'var(--muted)', transform: 'translateY(-50%)',
+            userSelect: 'none', top: z.top,
+          }}>{z.label}</div>
         ))}
       </div>
 
