@@ -31,6 +31,7 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    entrypoint: ["sh", "-c", "mkdir -p /var/www/html/var/cache /var/www/html/var/tmp /var/www/html/var/log && chown -R www-data:www-data /var/www/html/var && exec php-fpm"]
     environment:
       APP_ENV:      dev
       APP_SECRET:   ${APP_SECRET:-changethis_min32chars_xxxxxxxxxxx}

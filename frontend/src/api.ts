@@ -113,6 +113,7 @@ export interface RawEvent {
   endDate: string | null
   notifyForEnd: boolean
   note: string | null
+  rangeEventId: string | null
 }
 
 export async function fetchEvents() {

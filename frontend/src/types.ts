@@ -17,6 +17,7 @@ export interface TimelineEvent {
   endDate: string | null     // YYYY-MM-DD
   notifyForEnd: boolean
   note: string | null
+  rangeEventId: string | null
 }
 
 export interface ViewState {

@@ -16,7 +16,6 @@ interface Props {
 }
 
 const PRESETS = [
-  { label: 'day',    months: 0.07 },
   { label: 'week',   months: 0.5  },
   { label: 'month',  months: 12   },
   { label: 'year',   months: 36   },

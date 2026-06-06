@@ -56,10 +56,10 @@ export function HabitSettingsPanel({ open, integration, onClose, onSave, onSync 
             <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
               <div style={{
                 width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
-                background: !integration.hasToken ? 'var(--muted)' : integration.lastRunStatus === 'ok' ? '#34c759' : integration.lastRunStatus === 'error' ? '#ff3b30' : 'var(--muted)',
+                background: syncDotColor(integration),
               }} />
               <span style={{ color: 'var(--text)' }}>
-                {!integration.hasToken ? 'No token configured' : integration.lastRunStatus === 'ok' ? 'Synced' : integration.lastRunStatus === 'error' ? 'Sync error' : 'Not synced yet'}
+                {syncLabel(integration)}
               </span>
               {integration.lastRunAt && (
                 <span style={{ color: 'var(--muted)', marginLeft: 'auto' }}>{formatAgo(integration.lastRunAt)}</span>
@@ -122,6 +122,26 @@ export function HabitSettingsPanel({ open, integration, onClose, onSave, onSync 
       </div>
     </aside>
   )
+}
+
+const CRON_WINDOW_MS = 70 * 60 * 1000  // cron runs hourly; >70 min = missed window
+
+function isStale(integration: HabitIntegration): boolean {
+  return !!(integration.lastRunAt && Date.now() - new Date(integration.lastRunAt).getTime() > CRON_WINDOW_MS)
+}
+
+function syncDotColor(integration: HabitIntegration): string {
+  if (!integration.hasToken) return 'var(--muted)'
+  if (integration.lastRunStatus === 'error') return '#ff3b30'
+  if (integration.lastRunStatus === 'ok') return isStale(integration) ? '#ff9f0a' : '#34c759'
+  return 'var(--muted)'
+}
+
+function syncLabel(integration: HabitIntegration): string {
+  if (!integration.hasToken) return 'No token configured'
+  if (integration.lastRunStatus === 'error') return 'Sync error'
+  if (integration.lastRunStatus === 'ok') return isStale(integration) ? 'Unsynced' : 'Synced'
+  return 'Not synced yet'
 }
 
 function formatAgo(iso: string): string {

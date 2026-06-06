@@ -2,20 +2,18 @@ import { useCallback, useState } from 'react'
 import type { ViewState } from '../types'
 
 const DAY_MS = 86_400_000
-const HALF_YEAR = 182 * DAY_MS
+const YEAR_MS = 365 * DAY_MS
+
+// Place "now" at ~90% from the left so history fills the view
+function nowAtRightEdge(todayMs: number, totalMs: number): ViewState {
+  return { startMs: todayMs - totalMs * 0.9, endMs: todayMs + totalMs * 0.1 }
+}
 
 export function useTimelineView(today: Date) {
-  const [view, setView] = useState<ViewState>(() => ({
-    startMs: today.getTime() - HALF_YEAR,
-    endMs:   today.getTime() + HALF_YEAR,
-  }))
+  const [view, setView] = useState<ViewState>(() => nowAtRightEdge(today.getTime(), YEAR_MS))
 
   const setPreset = useCallback((months: number) => {
-    const halfMs = months * 30.44 * DAY_MS / 2
-    setView({
-      startMs: today.getTime() - halfMs,
-      endMs:   today.getTime() + halfMs,
-    })
+    setView(nowAtRightEdge(today.getTime(), months * 30.44 * DAY_MS))
   }, [today])
 
   const pan = useCallback((shiftMs: number) => {

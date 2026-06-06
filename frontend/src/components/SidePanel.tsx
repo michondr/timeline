@@ -5,6 +5,7 @@ import { useIsMobile } from '../hooks/useIsMobile'
 interface Props {
   event: TimelineEvent | null
   categories: Category[]
+  events: TimelineEvent[]
   isNew: boolean
   defaultCategoryId: string
   onClose: () => void
@@ -12,7 +13,7 @@ interface Props {
   onDelete: (id: string) => void
 }
 
-export function SidePanel({ event, categories, isNew, defaultCategoryId, onClose, onSave, onDelete }: Props) {
+export function SidePanel({ event, categories, events, isNew, defaultCategoryId, onClose, onSave, onDelete }: Props) {
   const isMobile = useIsMobile()
   const nameRef                 = useRef<HTMLInputElement>(null)
   const [name, setName]         = useState('')
@@ -20,8 +21,9 @@ export function SidePanel({ event, categories, isNew, defaultCategoryId, onClose
   const [categoryId, setCatId]  = useState('')
   const [startDate, setStart]   = useState('')
   const [endDate, setEnd]       = useState('')
-  const [notify, setNotify]     = useState(false)
-  const [note, setNote]         = useState('')
+  const [notify, setNotify]         = useState(false)
+  const [rangeEventId, setRangeEvId] = useState<string>('')
+  const [note, setNote]              = useState('')
 
   useEffect(() => {
     if (event) {
@@ -31,6 +33,7 @@ export function SidePanel({ event, categories, isNew, defaultCategoryId, onClose
       setStart(event.startDate ?? '')
       setEnd(event.endDate ?? '')
       setNotify(event.notifyForEnd)
+      setRangeEvId(event.rangeEventId ?? '')
       setNote(event.note ?? '')
     } else {
       setName('')
@@ -40,6 +43,7 @@ export function SidePanel({ event, categories, isNew, defaultCategoryId, onClose
       setStart('')
       setEnd('')
       setNotify(false)
+      setRangeEvId('')
       setNote('')
     }
   }, [event, categories, isNew, defaultCategoryId])
@@ -66,6 +70,7 @@ export function SidePanel({ event, categories, isNew, defaultCategoryId, onClose
       endDate:   type === 'pin' ? null : endDate || null,
       notifyForEnd: showNotify ? notify : false,
       note: note || null,
+      rangeEventId: type === 'pin' ? (rangeEventId || null) : null,
     })
   }
 
@@ -136,6 +141,21 @@ export function SidePanel({ event, categories, isNew, defaultCategoryId, onClose
               </Field>
             )}
           </div>
+
+          {type === 'pin' && (
+            <Field label="Part of range event">
+              <select
+                value={rangeEventId}
+                onChange={e => setRangeEvId(e.target.value)}
+                style={{ ...fiStyle, appearance: 'none' }}
+              >
+                <option value="">— none —</option>
+                {events.filter(e => e.type === 'range').map(e => (
+                  <option key={e.id} value={e.id}>{e.name}</option>
+                ))}
+              </select>
+            </Field>
+          )}
 
           {showNotify && (
             <Field>

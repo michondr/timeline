@@ -35,6 +35,7 @@ class EventController extends AbstractController
     public function create(
         Request $request,
         CategoryRepository $categoryRepo,
+        EventRepository $repo,
         EntityManagerInterface $em,
     ): JsonResponse {
         $data = json_decode($request->getContent(), true);
@@ -61,6 +62,12 @@ class EventController extends AbstractController
         }
         if (!empty($data['endDate'])) {
             $event->setEndDate(new \DateTimeImmutable($data['endDate']));
+        }
+        if (!empty($data['rangeEventId'])) {
+            $rangeEvent = $repo->find($data['rangeEventId']);
+            if ($rangeEvent && $rangeEvent->getUser() === $this->getUser()) {
+                $event->setRangeEvent($rangeEvent);
+            }
         }
 
         $em->persist($event);
@@ -103,6 +110,12 @@ class EventController extends AbstractController
         if (array_key_exists('endDate', $data)) {
             $event->setEndDate($data['endDate'] ? new \DateTimeImmutable($data['endDate']) : null);
         }
+        if (array_key_exists('rangeEventId', $data)) {
+            $rangeEvent = $data['rangeEventId'] ? $repo->find($data['rangeEventId']) : null;
+            if (!$data['rangeEventId'] || ($rangeEvent && $rangeEvent->getUser() === $this->getUser())) {
+                $event->setRangeEvent($rangeEvent ?: null);
+            }
+        }
         if (!empty($data['categoryId'])) {
             $category = $categoryRepo->find($data['categoryId']);
             if ($category && $category->getUser() === $this->getUser()) {
@@ -139,10 +152,11 @@ class EventController extends AbstractController
             'type'         => $e->getType(),
             'startDate'    => $e->getStartDate()?->format('Y-m-d'),
             'endDate'      => $e->getEndDate()?->format('Y-m-d'),
-            'notifyForEnd' => $e->isNotifyForEnd(),
-            'note'         => $e->getNote(),
-            'createdAt'    => $e->getCreatedAt()->format(\DateTimeInterface::ATOM),
-            'updatedAt'    => $e->getUpdatedAt()->format(\DateTimeInterface::ATOM),
+            'notifyForEnd'  => $e->isNotifyForEnd(),
+            'note'          => $e->getNote(),
+            'rangeEventId'  => $e->getRangeEvent()?->getId(),
+            'createdAt'     => $e->getCreatedAt()->format(\DateTimeInterface::ATOM),
+            'updatedAt'     => $e->getUpdatedAt()->format(\DateTimeInterface::ATOM),
         ];
     }
 }

@@ -53,6 +53,8 @@ export default function App() {
   const habitFetchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const { view, setPreset, pan, zoom, fitRange } = useTimelineView(TODAY)
+  const viewRef = useRef(view)
+  useEffect(() => { viewRef.current = view }, [view])
   const pendingEvents = events.filter(e => e.notifyForEnd && (!e.startDate || !e.endDate))
 
   // A query starting with new/edit/toggle is a command, not a filter → no live dimming
@@ -172,6 +174,7 @@ export default function App() {
 
   // ── Keyboard shortcuts ────────────────────────────────────────────────
   useEffect(() => {
+    const DAY_MS = 86_400_000
     function onKey(e: KeyboardEvent) {
       const tag = (e.target as HTMLElement).tagName
       const typing = tag === 'INPUT' || tag === 'TEXTAREA'
@@ -179,14 +182,33 @@ export default function App() {
         setEditEvent(null); setIsNewEvent(false); setPendingOpen(false); setCatModal(false); setFilterOpen(false)
         return
       }
-      if (e.key === ' ' && !typing && !filterOpen) {
+      if (typing || filterOpen) return
+      if (e.key === ' ') {
         e.preventDefault(); setFilterOpen(true)
         return
+      }
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+        e.preventDefault()
+        const { startMs, endMs } = viewRef.current
+        const span     = endMs - startMs
+        const spanDays = span / DAY_MS
+        if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+          const unit =
+            spanDays <= 3    ? 6 * 3_600_000 :
+            spanDays <= 21   ? DAY_MS :
+            spanDays <= 400  ? 30 * DAY_MS :
+            spanDays <= 1500 ? 91 * DAY_MS :
+                               365 * DAY_MS
+          pan(e.key === 'ArrowLeft' ? -unit : unit)
+        } else {
+          const nowRatio = Math.max(0, Math.min(1, (TODAY.getTime() - startMs) / span))
+          zoom(e.key === 'ArrowUp' ? -10 : 10, nowRatio, 0)
+        }
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [catModalOpen, filterOpen])
+  }, [filterOpen, pan, zoom])
 
   function openNew() {
     setEditEvent(null); setIsNewEvent(true); setPendingOpen(false)
@@ -296,6 +318,7 @@ export default function App() {
         startDate: patch.startDate ?? null,
         endDate: patch.endDate ?? null,
         notifyForEnd: patch.notifyForEnd,
+        rangeEventId: patch.rangeEventId ?? null,
       })
       setEvents(prev => prev.map(e => e.id === patch.id ? { ...e, ...patch } : e))
     } else {
@@ -307,6 +330,7 @@ export default function App() {
         endDate: patch.endDate ?? null,
         notifyForEnd: patch.notifyForEnd ?? false,
         note: encNote,
+        rangeEventId: patch.rangeEventId ?? null,
       })
       setEvents(prev => [...prev, {
         id: created.id,
@@ -317,6 +341,7 @@ export default function App() {
         endDate: created.endDate,
         notifyForEnd: created.notifyForEnd,
         note: patch.note ?? null,
+        rangeEventId: created.rangeEventId,
       }])
     }
     setEditEvent(null)
@@ -420,6 +445,7 @@ export default function App() {
         <SidePanel
           event={editEvent}
           categories={categories}
+          events={events}
           isNew={isNewEvent}
           defaultCategoryId={lastCatId}
           onClose={() => { setEditEvent(null); setIsNewEvent(false) }}

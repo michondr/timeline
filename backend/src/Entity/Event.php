@@ -47,6 +47,11 @@ class Event
     #[ORM\Column(type: 'text', nullable: true)]
     private ?string $note = null;
 
+    /** For pin events: the range event this pin belongs to. */
+    #[ORM\ManyToOne(targetEntity: self::class)]
+    #[ORM\JoinColumn(nullable: true, onDelete: 'SET NULL')]
+    private ?Event $rangeEvent = null;
+
     #[ORM\Column(type: 'datetime_immutable')]
     private \DateTimeImmutable $createdAt;
 
@@ -84,6 +89,9 @@ class Event
 
     public function getNote(): ?string { return $this->note; }
     public function setNote(?string $note): static { $this->note = $note; return $this; }
+
+    public function getRangeEvent(): ?Event { return $this->rangeEvent; }
+    public function setRangeEvent(?Event $event): static { $this->rangeEvent = $event; return $this; }
 
     public function getCreatedAt(): \DateTimeImmutable { return $this->createdAt; }
     public function getUpdatedAt(): \DateTimeImmutable { return $this->updatedAt; }
