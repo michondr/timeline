@@ -1,5 +1,7 @@
 name: timeline
 
+x-db-url: &db-url "postgresql://${POSTGRES_USER:-timeline}:${POSTGRES_PASSWORD:-timeline}@db:5432/${POSTGRES_DB:-timeline}?serverVersion=16&charset=utf8"
+
 services:
 
   # ── PostgreSQL ─────────────────────────────────────────────────────────
@@ -33,9 +35,13 @@ services:
         condition: service_healthy
     entrypoint: ["sh", "-c", "mkdir -p /var/www/html/var/cache /var/www/html/var/tmp /var/www/html/var/log && chown -R www-data:www-data /var/www/html/var && exec php-fpm"]
     environment:
-      APP_ENV:      dev
-      APP_SECRET:   ${APP_SECRET:-changethis_min32chars_xxxxxxxxxxx}
-      DATABASE_URL: "postgresql://${POSTGRES_USER:-timeline}:${POSTGRES_PASSWORD:-timeline}@db:5432/${POSTGRES_DB:-timeline}?serverVersion=16&charset=utf8"
+      APP_ENV:                ${APP_ENV:-dev}
+      APP_SECRET:             ${APP_SECRET:-changethis_min32chars_xxxxxxxxxxx}
+      DATABASE_URL:            *db-url
+      MESSENGER_TRANSPORT_DSN: *db-url
+      CORS_ALLOW_ORIGIN:      ${CORS_ALLOW_ORIGIN:-'^https?://(localhost|127\.0\.0\.1)(:[0-9]+)?$'}
+      WEBAUTHN_RP_ID:         ${WEBAUTHN_RP_ID:-localhost}
+      WEBAUTHN_RP_NAME:       ${WEBAUTHN_RP_NAME:-Timeline}
 
   # ── Nginx (serves Symfony public/) ────────────────────────────────────
   nginx:
@@ -92,8 +98,10 @@ services:
       db:
         condition: service_healthy
     environment:
-      APP_ENV:      dev
-      DATABASE_URL: "postgresql://${POSTGRES_USER:-timeline}:${POSTGRES_PASSWORD:-timeline}@db:5432/${POSTGRES_DB:-timeline}?serverVersion=16&charset=utf8"
+      APP_ENV:                ${APP_ENV:-dev}
+      APP_SECRET:             ${APP_SECRET:-changethis_min32chars_xxxxxxxxxxx}
+      DATABASE_URL:            *db-url
+      MESSENGER_TRANSPORT_DSN: *db-url
 
 volumes:
   db_data:

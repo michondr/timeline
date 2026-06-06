@@ -6,4 +6,9 @@ export default defineConfig({
   server: {
     allowedHosts: ['timeline.michondr.space'],
   },
+  preview: {
+    host: '0.0.0.0',
+    port: 5173,
+    allowedHosts: ['timeline.michondr.space'],
+  },
 })

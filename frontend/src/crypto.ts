@@ -8,9 +8,9 @@ export function toB64url(buf: ArrayBuffer | Uint8Array): string {
   return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '')
 }
 
-export function fromB64url(s: string): Uint8Array {
+export function fromB64url(s: string): Uint8Array<ArrayBuffer> {
   const padded = s.replace(/-/g, '+').replace(/_/g, '/') + '=='.slice(0, (4 - s.length % 4) % 4)
-  return Uint8Array.from(atob(padded), c => c.charCodeAt(0))
+  return Uint8Array.from(atob(padded), c => c.charCodeAt(0)) as Uint8Array<ArrayBuffer>
 }
 
 function toB64(buf: ArrayBuffer | Uint8Array): string {
@@ -20,45 +20,32 @@ function toB64(buf: ArrayBuffer | Uint8Array): string {
   return btoa(s)
 }
 
-function fromB64(s: string): Uint8Array {
-  return Uint8Array.from(atob(s), c => c.charCodeAt(0))
+function fromB64(s: string): Uint8Array<ArrayBuffer> {
+  return Uint8Array.from(atob(s), c => c.charCodeAt(0)) as Uint8Array<ArrayBuffer>
 }
 
-function toHex(buf: ArrayBuffer): string {
-  return Array.from(new Uint8Array(buf))
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('')
-}
-
-/**
- * Derive two independent 256-bit keys from a passphrase + server-provided salt.
- * The same salt + different suffix → independent enc and auth keys.
- */
-async function pbkdf2Bits(passphrase: string, saltBytes: Uint8Array, suffix: string): Promise<ArrayBuffer> {
-  const baseKey = await crypto.subtle.importKey(
-    'raw', enc.encode(passphrase), 'PBKDF2', false, ['deriveBits'],
-  )
-  const salt = new Uint8Array([...saltBytes, ...enc.encode(':' + suffix)])
-  return crypto.subtle.deriveBits(
-    { name: 'PBKDF2', salt, iterations: 200_000, hash: 'SHA-256' },
-    baseKey,
-    256,
-  )
-}
 
 export interface DerivedKeys {
   encKey: CryptoKey
   authKeyHex: string
 }
 
-export async function deriveKeys(passphrase: string, kdfSalt: string): Promise<DerivedKeys> {
-  const saltBytes = fromB64(kdfSalt)
-  const [encBits, authBits] = await Promise.all([
-    pbkdf2Bits(passphrase, saltBytes, 'enc'),
-    pbkdf2Bits(passphrase, saltBytes, 'auth'),
-  ])
-  const encKey = await crypto.subtle.importKey('raw', encBits, 'AES-GCM', false, ['encrypt', 'decrypt'])
-  return { encKey, authKeyHex: toHex(authBits) }
+export function deriveKeys(passphrase: string, kdfSalt: string): Promise<DerivedKeys> {
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(new URL('./crypto.worker.ts', import.meta.url), { type: 'module' })
+    worker.onmessage = async (e: MessageEvent<{ encBitsArr: Uint8Array; authKeyHex: string; error?: string }>) => {
+      worker.terminate()
+      if (e.data.error) { reject(new Error(e.data.error)); return }
+      try {
+        const encKey = await crypto.subtle.importKey('raw', e.data.encBitsArr as Uint8Array<ArrayBuffer>, 'AES-GCM', false, ['encrypt', 'decrypt'])
+        resolve({ encKey, authKeyHex: e.data.authKeyHex })
+      } catch (err) {
+        reject(err)
+      }
+    }
+    worker.onerror = (err) => { worker.terminate(); reject(err) }
+    worker.postMessage({ passphrase, kdfSalt })
+  })
 }
 
 export function generateKdfSalt(): string {

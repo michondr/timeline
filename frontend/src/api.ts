@@ -1,8 +1,10 @@
 const BASE = (import.meta.env.VITE_API_URL ?? '') + '/api'
 
 export class ApiError extends Error {
-  constructor(public status: number, message: string) {
+  status: number
+  constructor(status: number, message: string) {
     super(message)
+    this.status = status
   }
 }
 

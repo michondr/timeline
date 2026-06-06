@@ -23,7 +23,7 @@ export default function App() {
   const [phase, setPhase]           = useState<Phase>('loading')
   const [encKey, setEncKey]         = useState<CryptoKey | null>(null)
   const [birthdate, setBirthdate]   = useState(new Date())
-  const [dateFormat, setDateFormat] = useState<DateFormat>('DMY-dot')
+  const [, setDateFormat] = useState<DateFormat>('DMY-dot')
 
   const [categories, setCategories] = useState<Category[]>([])
   const [events, setEvents]         = useState<TimelineEvent[]>([])
@@ -52,10 +52,23 @@ export default function App() {
 
   const habitFetchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const { view, setPreset, pan, zoom, fitRange } = useTimelineView(TODAY)
+  const { view, setPreset, pan, zoom, fitRange, setSpan, seekTo } = useTimelineView(TODAY)
   const viewRef = useRef(view)
   useEffect(() => { viewRef.current = view }, [view])
   const pendingEvents = events.filter(e => e.notifyForEnd && (!e.startDate || !e.endDate))
+
+  // Pan scrollbar upper bound: latest range-event end, or today+1y if nothing extends further
+  const panEndMs = useMemo(() => {
+    const DAY_MS = 86_400_000
+    const floor  = TODAY.getTime() + 365 * DAY_MS
+    const evMax  = events
+      .filter(e => e.type === 'range')
+      .reduce((m, e) => {
+        const d = e.endDate ?? e.startDate
+        return d ? Math.max(m, new Date(d + 'T00:00:00').getTime()) : m
+      }, -Infinity)
+    return Number.isFinite(evMax) ? Math.max(floor, evMax) : floor
+  }, [events])
 
   // A query starting with new/edit/toggle is a command, not a filter → no live dimming
   const commandLike = /^\s*(new|edit|toggle)\b/i.test(filterQuery)
@@ -201,14 +214,13 @@ export default function App() {
                                365 * DAY_MS
           pan(e.key === 'ArrowLeft' ? -unit : unit)
         } else {
-          const nowRatio = Math.max(0, Math.min(1, (TODAY.getTime() - startMs) / span))
-          zoom(e.key === 'ArrowUp' ? -10 : 10, nowRatio, 0)
+          setSpan(span * (e.key === 'ArrowUp' ? 1 / 1.3 : 1.3))
         }
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [filterOpen, pan, zoom])
+  }, [filterOpen, pan, setSpan])
 
   function openNew() {
     setEditEvent(null); setIsNewEvent(true); setPendingOpen(false)
@@ -413,14 +425,18 @@ export default function App() {
       <Topbar
         pendingCount={pendingEvents.length}
         habitIntegration={habitIntegration}
+        view={view}
+        today={TODAY}
+        birthdate={birthdate}
+        panEndMs={panEndMs}
         onNewEvent={openNew}
         onPending={() => setPendingOpen(p => !p)}
         onCategories={() => { setCatAutoFocusNew(false); setCatExpandId(null); setCatModal(c => !c) }}
         onExport={handleExport}
         onHabitSettings={() => { closeAll(); setHabitSettings(true) }}
         onHabitSync={handleHabitSync}
-        onPreset={handlePreset}
-        activePreset={activePreset}
+        onSetSpan={setSpan}
+        onSeek={seekTo}
       />
 
       <div style={{ flex: 1, display: 'flex', position: 'relative', overflow: 'hidden' }}>

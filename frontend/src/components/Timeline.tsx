@@ -76,7 +76,7 @@ function getGridDates(startT: number, endT: number) {
   return result
 }
 
-export function Timeline({ view, today, birthdate, categories, events, habits, showHabits, showBooks, hiddenCats, filterIds, onPan, onZoom, onEventClick, onBackgroundClick, onDoubleTap }: Props) {
+export function Timeline({ view, today, birthdate, categories, events, habits, showHabits, showBooks: _showBooks, hiddenCats, filterIds, onPan, onZoom, onEventClick, onBackgroundClick, onDoubleTap }: Props) {
   const wrapRef   = useRef<HTMLDivElement>(null)
   const svgRef    = useRef<SVGSVGElement>(null)
   const dragRef   = useRef<{ prevX: number } | null>(null)
@@ -504,8 +504,9 @@ export function Timeline({ view, today, birthdate, categories, events, habits, s
       }
 
     } else {
-      // Daily circles
-      for (let t = view.startMs; t <= view.endMs; t += DAY_MS) {
+      // Daily circles — snap loop start to midnight so circles stay on day boundaries
+      const d0 = new Date(view.startMs); d0.setHours(0, 0, 0, 0)
+      for (let t = d0.getTime(); t <= view.endMs; t += DAY_MS) {
         const x = toX(t)
         if (x < PAD + 2 || x > w - PAD - 2) continue
 
@@ -630,7 +631,7 @@ export function Timeline({ view, today, birthdate, categories, events, habits, s
       } else if (e.touches.length === 2) {
         const dx = e.touches[0].clientX - e.touches[1].clientX
         const dy = e.touches[0].clientY - e.touches[1].clientY
-        touchStateRef.current = { startX: 0, prevX: 0, prevDist: Math.sqrt(dx * dx + dy * dy), moved: true, startTarget: null }
+        touchStateRef.current = { startX: 0, startY: 0, prevX: 0, prevDist: Math.sqrt(dx * dx + dy * dy), moved: true, isVertical: null, startTarget: null }
       }
     }
 
@@ -658,7 +659,7 @@ export function Timeline({ view, today, birthdate, categories, events, habits, s
         if (s.prevDist !== null) {
           const delta = s.prevDist - dist
           const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2
-          const rect = el.getBoundingClientRect()
+          const rect = el!.getBoundingClientRect()
           const ratio = Math.max(0, Math.min(1, (midX - rect.left - pad) / tlw))
           zoom(delta, ratio, cw)
         }

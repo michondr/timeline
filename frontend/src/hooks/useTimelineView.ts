@@ -32,7 +32,7 @@ export function useTimelineView(today: Date) {
   const zoom = useCallback((
     deltaY: number,
     mouseRatio: number,
-    containerWidth: number,
+    _containerWidth: number,
   ) => {
     setView(prev => {
       const span     = prev.endMs - prev.startMs
@@ -44,5 +44,27 @@ export function useTimelineView(today: Date) {
     })
   }, [])
 
-  return { view, setView, setPreset, pan, zoom, fitRange }
+  // Zoom to a target span, keeping "now" at the same visual ratio
+  const setSpan = useCallback((spanMs: number) => {
+    setView(prev => {
+      const span     = prev.endMs - prev.startMs
+      const nowMs    = today.getTime()
+      const nowRatio = (nowMs - prev.startMs) / span
+      const anchor   = nowRatio >= 0 && nowRatio <= 1 ? nowRatio : 0.5
+      const anchorMs = prev.startMs + anchor * span
+      const clamped  = Math.max(2 * DAY_MS, Math.min(120 * 365 * DAY_MS, spanMs))
+      const startMs  = anchorMs - anchor * clamped
+      return { startMs, endMs: startMs + clamped }
+    })
+  }, [today])
+
+  // Move the view so `centerMs` is in the middle, keeping the current span
+  const seekTo = useCallback((centerMs: number) => {
+    setView(prev => {
+      const span = prev.endMs - prev.startMs
+      return { startMs: centerMs - span / 2, endMs: centerMs + span / 2 }
+    })
+  }, [])
+
+  return { view, setView, setPreset, pan, zoom, fitRange, setSpan, seekTo }
 }
