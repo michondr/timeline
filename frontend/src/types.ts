@@ -39,6 +39,25 @@ export interface TickTickTodo {
   projectId: string
 }
 
+export interface Book {
+  id: string
+  absItemId: string
+  title: string
+  author: string | null
+  startedAt: string | null   // YYYY-MM-DD
+  finishedAt: string | null  // YYYY-MM-DD
+  isFinished: boolean
+  currentTime: number | null  // seconds listened
+}
+
+export interface AbsIntegration {
+  hasCredentials: boolean
+  url: string
+  lastRunAt: string | null
+  lastRunStatus: 'ok' | 'error' | null
+  lastRunError: string | null
+}
+
 export interface HabitIntegration {
   hasToken: boolean
   lastRunAt: string | null   // ISO

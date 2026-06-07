@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { Category, Habit, TimelineEvent, ViewState } from '../types'
+import type { Book, Category, Habit, TimelineEvent, ViewState } from '../types'
 import { useIsMobile } from '../hooks/useIsMobile'
 
 interface Props {
@@ -9,12 +9,14 @@ interface Props {
   categories: Category[]
   events: TimelineEvent[]
   habits: Habit[]
+  books: Book[]
   showHabits: boolean
   showBooks: boolean
   hiddenCats: Set<string>
   filterIds: Set<string> | null
   onPan: (shiftMs: number) => void
   onZoom: (dy: number, ratio: number, w: number) => void
+  onZoomBy: (factor: number, ratio: number) => void
   onEventClick: (id: string) => void
   onBackgroundClick: () => void
   onDoubleTap: () => void
@@ -22,6 +24,10 @@ interface Props {
 
 const DAY_MS = 86_400_000
 const MONTH = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+
+function escXml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
 
 function fmtDate(d: Date) {
   return `${MONTH[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`
@@ -76,7 +82,7 @@ function getGridDates(startT: number, endT: number) {
   return result
 }
 
-export function Timeline({ view, today, birthdate, categories, events, habits, showHabits, showBooks: _showBooks, hiddenCats, filterIds, onPan, onZoom, onEventClick, onBackgroundClick, onDoubleTap }: Props) {
+export function Timeline({ view, today, birthdate, categories, events, habits, books, showHabits, showBooks, hiddenCats, filterIds, onPan, onZoom, onZoomBy, onEventClick, onBackgroundClick, onDoubleTap }: Props) {
   const wrapRef   = useRef<HTMLDivElement>(null)
   const svgRef    = useRef<SVGSVGElement>(null)
   const dragRef   = useRef<{ prevX: number } | null>(null)
@@ -104,12 +110,74 @@ export function Timeline({ view, today, birthdate, categories, events, habits, s
   const toX   = (t: number) => PAD + ((t - view.startMs) / span) * TL_W
   const dateX = (d: Date)   => toX(d.getTime())
 
-  const AXIS_Y     = Math.round(h * 0.42)
-  const OPEN_Y     = Math.round(h * 0.07)
-  const HABITS_Y   = AXIS_Y + 32
-  const HABITS_H   = showHabits && habits.length > 0 ? habits.length * 22 + 10 : 0
+  const AXIS_Y  = Math.round(h * 0.42)
+  const OPEN_Y  = Math.round(h * 0.07)
+  const BOOKS_Y = AXIS_Y + 32   // books zone directly below axis
+
+  // ── Books lane computation (needed before HABITS_Y) ───────────────────
+  const coversBase   = import.meta.env.VITE_API_URL ?? ''
+  const BOOK_ROW_H   = 50
+  const BOOK_BAR_OFF = 38   // bar Y offset within its lane row
+
+  const visBooks        = showBooks ? books : []
+  const finishedBooks   = visBooks.filter(b => b.isFinished && b.startedAt && b.finishedAt)
+  const unfinishedBooks = visBooks.filter(b => !b.isFinished && b.startedAt)
+  const booksToRender = [...finishedBooks, ...unfinishedBooks]
+    .sort((a, b) => (a.startedAt! < b.startedAt! ? -1 : 1))
+
+  // Label-aware greedy lane assignment:
+  // A book fits in a lane only when its bar doesn't time-overlap AND
+  // its label box doesn't pixel-overlap with the last label shown in that lane.
+  const BCHAR_W   = 6.2
+  const BLABEL_PAD = 10
+
+  function bookLabelRange(book: Book, sx: number): { lx: number; rx: number } | null {
+    const pinned  = !book.isFinished && sx < EVT_PAD
+    const inView  = sx > EVT_PAD - 30 && sx < w - 30
+    if (!pinned && !inView) return null
+    const lx = pinned ? EVT_PAD + 4 : sx + 4
+    return { lx, rx: lx + 28 + Math.min(book.title.length, 30) * BCHAR_W + BLABEL_PAD }
+  }
+
+  // Cap lanes to what fits vertically (habits zone height is independent of books)
+  const habitsH  = showHabits && habits.length > 0 ? habits.length * 22 + 10 : 0
+  const maxLanes = Math.max(1, Math.floor((h - BOOKS_Y - (habitsH > 0 ? habitsH + 36 : 24)) / BOOK_ROW_H))
+
+  type BookLane  = { book: Book; start: Date; end: Date; lane: number }
+  type LaneState = { timeEnd: number; labelEndX: number }
+
+  const bookLanes:  BookLane[]  = []
+  const laneStates: LaneState[] = []
+
+  for (const book of booksToRender) {
+    const start  = new Date(book.startedAt!)
+    const end    = book.isFinished ? new Date(book.finishedAt!) : today
+    const sx     = dateX(start)
+    const lr     = bookLabelRange(book, sx)
+
+    let lane = laneStates.findIndex(s =>
+      s.timeEnd <= start.getTime() &&
+      (!lr || s.labelEndX + 2 <= lr.lx)
+    )
+    // If no lane fits and we're at the cap, skip this book
+    if (lane === -1) {
+      if (laneStates.length >= maxLanes) continue
+      lane = laneStates.length
+      laneStates.push({ timeEnd: 0, labelEndX: -Infinity })
+    }
+
+    laneStates[lane] = {
+      timeEnd:   end.getTime(),
+      labelEndX: lr ? lr.rx : laneStates[lane].labelEndX,
+    }
+    bookLanes.push({ book, start, end, lane })
+  }
+
+  const BOOKS_H   = showBooks && bookLanes.length > 0 ? laneStates.length * BOOK_ROW_H : 0
+  const BOOKS_SEP = BOOKS_Y + BOOKS_H + (BOOKS_H > 0 ? 4 : 0)
+  const HABITS_Y  = BOOKS_SEP + (BOOKS_H > 0 ? 16 : 0)
+  const HABITS_H  = showHabits && habits.length > 0 ? habits.length * 22 + 10 : 0
   const HABITS_SEP = HABITS_Y + HABITS_H + 4
-  const BOOKS_Y    = HABITS_SEP + 20
 
   function clamp(v: number, lo: number, hi: number) { return Math.max(lo, Math.min(hi, v)) }
 
@@ -131,7 +199,10 @@ export function Timeline({ view, today, birthdate, categories, events, habits, s
   const grid = getGridDates(view.startMs, view.endMs)
   const pieces: string[] = []
 
-  // Separator under habits (above books)
+  // Zone separators
+  if (BOOKS_H > 0) {
+    pieces.push(`<line x1="0" y1="${BOOKS_SEP}" x2="${w}" y2="${BOOKS_SEP}" stroke="#1c1c1e" stroke-width="1"/>`)
+  }
   pieces.push(`<line x1="0" y1="${HABITS_SEP}" x2="${w}" y2="${HABITS_SEP}" stroke="#1c1c1e" stroke-width="1"/>`)
 
   // Grid lines
@@ -539,14 +610,77 @@ export function Timeline({ view, today, birthdate, categories, events, habits, s
     pieces.push(`<text x="${statsX}" y="${y + 4}" fill="#3a3a46" font-size="10" font-family="system-ui">${statsTxt}</text>`)
   })
 
+  // ── Books ─────────────────────────────────────────────────────────────────
+  if (showBooks && bookLanes.length > 0) {
+    bookLanes.forEach(({ book, start, end, lane }) => {
+      const barY   = BOOKS_Y + BOOK_BAR_OFF + lane * BOOK_ROW_H
+      const startX = dateX(start)
+      const endX   = dateX(end)
+      const col    = '#7c7c8a'
+
+      // Skip if bar is entirely off-screen
+      if (endX < EVT_PAD || startX > w - EVT_PAD) return
+
+      const x1 = clamp(startX, EVT_PAD, w - EVT_PAD)
+      const x2 = book.isFinished ? clamp(endX, x1 + 16, w - EVT_PAD) : w - EVT_PAD
+
+      // Label is guaranteed non-overlapping by lane assignment
+      const lr = bookLabelRange(book, startX)
+      if (lr) {
+        const labelX = lr.lx
+        const coverY = barY - 30
+        const titleTxt  = escXml(book.title.length > 30 ? book.title.slice(0, 29) + '…' : book.title)
+        const authorTxt = book.author ? escXml(book.author.length > 28 ? book.author.slice(0, 27) + '…' : book.author) : ''
+        pieces.push(`<image href="${coversBase}/covers/${escXml(book.absItemId)}.jpg" x="${labelX - 2}" y="${coverY}" width="20" height="28" preserveAspectRatio="xMidYMid meet"/>`)
+        pieces.push(`<text x="${labelX + 24}" y="${barY - 16}" fill="#8a8a9a" font-size="10" font-family="system-ui" font-weight="500">${titleTxt}</text>`)
+        if (authorTxt) {
+          pieces.push(`<text x="${labelX + 24}" y="${barY - 5}" fill="#5a5a6e" font-size="9" font-family="system-ui">${authorTxt}</text>`)
+        }
+      }
+
+      if (book.isFinished) {
+        pieces.push(`<line x1="${x1}" y1="${barY}" x2="${x2}" y2="${barY}" stroke="${col}" stroke-width="3" stroke-linecap="round"/>`)
+        pieces.push(`<circle cx="${x1}" cy="${barY}" r="4" fill="${col}"/>`)
+        pieces.push(`<circle cx="${x2}" cy="${barY}" r="4" fill="${col}"/>`)
+      } else {
+        if (startX >= EVT_PAD) {
+          pieces.push(`<circle cx="${startX}" cy="${barY}" r="4" fill="${col}"/>`)
+        }
+        pieces.push(`<line x1="${x1}" y1="${barY}" x2="${x2 - 14}" y2="${barY}" stroke="${col}" stroke-width="2" stroke-linecap="round"/>`)
+        pieces.push(`<polygon points="${x2 - 12},${barY - 5} ${x2},${barY} ${x2 - 12},${barY + 5}" fill="${col}"/>`)
+      }
+
+    })
+
+    // Total listening hours for books whose bars overlap the current viewport
+    const totalSecs = booksToRender
+      .filter(book => {
+        const s = new Date(book.startedAt!).getTime()
+        const e = book.isFinished ? new Date(book.finishedAt!).getTime() : today.getTime()
+        return s <= view.endMs && e >= view.startMs
+      })
+      .reduce((sum, book) => sum + (book.currentTime ?? 0), 0)
+    if (totalSecs > 0) {
+      const hrs    = totalSecs / 3600
+      const hrsTxt = hrs >= 10 ? `${Math.round(hrs)}h` : `${Math.round(hrs * 10) / 10}h`
+      pieces.push(`<text x="${w - 2}" y="${BOOKS_Y + 14}" text-anchor="end" fill="#3a3a46" font-size="10" font-family="system-ui">${hrsTxt} total</text>`)
+    }
+
+    // Hidden-books notice
+    const hiddenCount = booksToRender.length - bookLanes.length
+    if (hiddenCount > 0) {
+      pieces.push(`<text x="${w - 2}" y="${BOOKS_Y + BOOKS_H - 4}" text-anchor="end" fill="#3a3a46" font-size="10" font-family="system-ui">+${hiddenCount} more</text>`)
+    }
+  }
+
   const svgContent = pieces.join('\n')
 
   // ── Zone labels ───────────────────────────────────────────────────────────
   const zones = [
     { label: 'open',   top: OPEN_Y + 12 },
     { label: 'axis',   top: AXIS_Y },
+    ...(BOOKS_H > 0 ? [{ label: 'books',  top: BOOKS_Y + BOOKS_H / 2 }] : []),
     { label: 'habits', top: HABITS_Y + Math.max(10, HABITS_H / 2) },
-    { label: 'books',  top: BOOKS_Y + 20 },
   ]
 
   // ── Event handlers on SVG ─────────────────────────────────────────────────
@@ -619,8 +753,8 @@ export function Timeline({ view, today, birthdate, categories, events, habits, s
     moved: boolean; isVertical: boolean | null; startTarget: EventTarget | null
   } | null>(null)
 
-  const latestRef = useRef({ TL_W, span, PAD, w, onPan, onZoom, onEventClick, onBackgroundClick, onDoubleTap })
-  useEffect(() => { latestRef.current = { TL_W, span, PAD, w, onPan, onZoom, onEventClick, onBackgroundClick, onDoubleTap } })
+  const latestRef = useRef({ TL_W, span, PAD, w, onPan, onZoom, onZoomBy, onEventClick, onBackgroundClick, onDoubleTap })
+  useEffect(() => { latestRef.current = { TL_W, span, PAD, w, onPan, onZoom, onZoomBy, onEventClick, onBackgroundClick, onDoubleTap } })
   const lastTapRef = useRef(0)
 
   useEffect(() => {
@@ -640,7 +774,7 @@ export function Timeline({ view, today, birthdate, categories, events, habits, s
     function onTouchMove(e: TouchEvent) {
       const s = touchStateRef.current
       if (!s) return
-      const { TL_W: tlw, span: sp, PAD: pad, w: cw, onPan: pan, onZoom: zoom } = latestRef.current
+      const { TL_W: tlw, span: sp, PAD: pad, onPan: pan } = latestRef.current
       if (e.touches.length === 1 && s.prevDist === null) {
         const adx = Math.abs(e.touches[0].clientX - s.startX)
         const ady = Math.abs(e.touches[0].clientY - s.startY)
@@ -658,20 +792,25 @@ export function Timeline({ view, today, birthdate, categories, events, habits, s
         const dx = e.touches[0].clientX - e.touches[1].clientX
         const dy = e.touches[0].clientY - e.touches[1].clientY
         const dist = Math.sqrt(dx * dx + dy * dy)
-        if (s.prevDist !== null) {
-          const delta = s.prevDist - dist
+        if (s.prevDist !== null && dist > 5) {
+          // Use actual ratio for smooth continuous zoom (clamped to avoid jumps on dropped frames)
+          const rawFactor = s.prevDist / dist
+          const factor    = Math.max(0.88, Math.min(1.12, rawFactor))
           const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2
           const rect = el!.getBoundingClientRect()
           const ratio = Math.max(0, Math.min(1, (midX - rect.left - pad) / tlw))
-          zoom(delta, ratio, cw)
+          latestRef.current.onZoomBy(factor, ratio)
         }
         s.prevDist = dist
       }
     }
 
-    function onTouchEnd() {
+    function onTouchEnd(e: TouchEvent) {
       const s = touchStateRef.current
       if (s && !s.moved && s.startTarget) {
+        // Prevent browser from firing synthetic mousedown/mouseup/click after this tap,
+        // which would otherwise immediately call onBackgroundClick and close any panel we open.
+        e.preventDefault()
         let cur = s.startTarget as Element | null
         let found = false
         while (cur) {
@@ -700,7 +839,7 @@ export function Timeline({ view, today, birthdate, categories, events, habits, s
 
     el.addEventListener('touchstart', onTouchStart, { passive: true })
     el.addEventListener('touchmove', onTouchMove, { passive: false })
-    el.addEventListener('touchend', onTouchEnd, { passive: true })
+    el.addEventListener('touchend', onTouchEnd, { passive: false })
     return () => {
       el.removeEventListener('touchstart', onTouchStart)
       el.removeEventListener('touchmove', onTouchMove)
@@ -735,8 +874,8 @@ export function Timeline({ view, today, birthdate, categories, events, habits, s
         <svg
           ref={svgRef}
           style={isMobile
-            ? { display: 'block', width: '100%', height: Math.max(h, BOOKS_Y + 60), cursor: 'grab' }
-            : { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', cursor: dragRef.current ? 'grabbing' : 'grab' }
+            ? { display: 'block', width: '100%', height: Math.max(h, BOOKS_Y + 60), cursor: 'grab', userSelect: 'none', WebkitUserSelect: 'none' }
+            : { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', cursor: dragRef.current ? 'grabbing' : 'grab', userSelect: 'none', WebkitUserSelect: 'none' }
           }
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}

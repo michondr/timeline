@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { Category, Habit, HabitIntegration, TickTickTodo, TimelineEvent } from './types'
+import type { AbsIntegration, Book, Category, Habit, HabitIntegration, TickTickTodo, TimelineEvent } from './types'
 import type { DerivedKeys } from './crypto'
 import { decryptField, encryptField } from './crypto'
 import * as api from './api'
@@ -12,6 +12,7 @@ import { TodoPanel } from './components/TodoPanel'
 import { ToastProvider } from './components/Toast'
 import { CategoryPanel } from './components/CategoryPanel'
 import { HabitSettingsPanel } from './components/HabitSettingsPanel'
+import { AbsSettingsPanel } from './components/AbsSettingsPanel'
 import { FilterBar } from './components/FilterBar'
 import { applyFilter } from './filter'
 import { AuthFlow } from './components/AuthFlow'
@@ -36,6 +37,10 @@ export default function App() {
   const [habitIntegration, setHabitIntegration] = useState<HabitIntegration | null>(null)
   const [habitSettingsOpen, setHabitSettings]   = useState(false)
 
+  const [books, setBooks]                       = useState<Book[]>([])
+  const [absIntegration, setAbsIntegration]     = useState<AbsIntegration | null>(null)
+  const [absSettingsOpen, setAbsSettings]       = useState(false)
+
   const [editEvent, setEditEvent]       = useState<TimelineEvent | null>(null)
   const [isNewEvent, setIsNewEvent]     = useState(false)
   const [pendingOpen, setPendingOpen]   = useState(false)
@@ -57,7 +62,7 @@ export default function App() {
 
   const habitFetchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const { view, setPreset, pan, zoom, fitRange, setSpan, seekTo } = useTimelineView(TODAY)
+  const { view, setPreset, pan, zoom, zoomBy, fitRange, setSpan, seekTo } = useTimelineView(TODAY)
   const viewRef = useRef(view)
   useEffect(() => { viewRef.current = view }, [view])
   const pendingEvents = events.filter(e => e.notifyForEnd && (!e.startDate || !e.endDate))
@@ -144,6 +149,19 @@ export default function App() {
     api.fetchHabitIntegration().then(setHabitIntegration).catch(() => {})
   }, [phase])
 
+  // ── Load ABS integration and books once on ready ──────────────────────
+  useEffect(() => {
+    if (phase !== 'ready') return
+    api.fetchAbsIntegration()
+      .then(raw => {
+        setAbsIntegration(raw)
+        if (raw.hasCredentials) {
+          api.fetchBooks().then(setBooks).catch(() => {})
+        }
+      })
+      .catch(() => {})
+  }, [phase])
+
   // ── Load todos when integration is confirmed active ────────────────────
   useEffect(() => {
     if (phase !== 'ready' || !habitIntegration?.hasToken) return
@@ -200,6 +218,45 @@ export default function App() {
         api.fetchTodos().then(setTodos).catch(() => {}),
       ])
       setHabitIntegration(integration)
+    }, 3000)
+  }
+
+  async function handleAbsSave(url: string, token: string) {
+    await api.saveAbsIntegration(url, token)
+    const integration = await api.fetchAbsIntegration()
+    setAbsIntegration(integration)
+    if (integration.hasCredentials) {
+      api.fetchBooks().then(setBooks).catch(() => {})
+    }
+  }
+
+  async function handleRefresh() {
+    if (!encKey) return
+    const key = encKey
+    const from = new Date(view.startMs).toISOString().slice(0, 10)
+    const to   = new Date(view.endMs).toISOString().slice(0, 10)
+    await Promise.all([
+      Promise.all([api.fetchCategories(), api.fetchEvents()])
+        .then(async ([rawCats, rawEvts]) => {
+          const cats = await Promise.all(rawCats.map(async c => ({ ...c, name: await decryptField(key, c.name) })))
+          const evts = await Promise.all(rawEvts.map(async e => ({ ...e, name: await decryptField(key, e.name), note: e.note ? await decryptField(key, e.note) : null })))
+          setCategories(cats); setEvents(evts)
+        }),
+      api.fetchHabits(from, to).then(raw => setHabits(raw.map(h => ({ ...h, logs: h.logs ?? {} })))).catch(() => {}),
+      api.fetchHabitIntegration().then(setHabitIntegration).catch(() => {}),
+      api.fetchAbsIntegration().then(raw => { setAbsIntegration(raw); if (raw.hasCredentials) api.fetchBooks().then(setBooks).catch(() => {}) }).catch(() => {}),
+      api.fetchTodos().then(setTodos).catch(() => {}),
+    ])
+  }
+
+  async function handleAbsSync() {
+    await api.triggerAbsSync()
+    setTimeout(async () => {
+      const [integration] = await Promise.all([
+        api.fetchAbsIntegration(),
+        api.fetchBooks().then(setBooks).catch(() => {}),
+      ])
+      setAbsIntegration(integration)
     }, 3000)
   }
 
@@ -336,7 +393,7 @@ export default function App() {
   }
 
   function closeAll() {
-    setEditEvent(null); setIsNewEvent(false); setPendingOpen(false); setTodoOpen(false); setCatModal(false); setHabitSettings(false)
+    setEditEvent(null); setIsNewEvent(false); setPendingOpen(false); setTodoOpen(false); setCatModal(false); setHabitSettings(false); setAbsSettings(false)
   }
 
   async function handleSave(patch: Partial<TimelineEvent> & { id?: string }) {
@@ -452,6 +509,7 @@ export default function App() {
         todoCount={todos.length}
         todosLoading={todosLoading}
         habitIntegration={habitIntegration}
+        absIntegration={absIntegration}
         view={view}
         today={TODAY}
         birthdate={birthdate}
@@ -463,6 +521,9 @@ export default function App() {
         onExport={handleExport}
         onHabitSettings={() => { closeAll(); setHabitSettings(true) }}
         onHabitSync={handleHabitSync}
+        onAbsSettings={() => { closeAll(); setAbsSettings(true) }}
+        onAbsSync={handleAbsSync}
+        onRefresh={handleRefresh}
         onSetSpan={setSpan}
         onSeek={seekTo}
       />
@@ -475,12 +536,14 @@ export default function App() {
           categories={categories}
           events={events}
           habits={habits}
+          books={books}
           showHabits={showHabits}
           showBooks={showBooks}
           hiddenCats={hiddenCats}
           filterIds={filter.ids}
           onPan={pan}
           onZoom={zoom}
+          onZoomBy={zoomBy}
           onEventClick={handleEventClick}
           onBackgroundClick={closeAll}
           onDoubleTap={() => setFilterOpen(true)}
@@ -531,6 +594,14 @@ export default function App() {
           onClose={() => setHabitSettings(false)}
           onSave={handleHabitSave}
           onSync={handleHabitSync}
+        />
+
+        <AbsSettingsPanel
+          open={absSettingsOpen}
+          integration={absIntegration}
+          onClose={() => setAbsSettings(false)}
+          onSave={handleAbsSave}
+          onSync={handleAbsSync}
         />
 
         <FilterBar

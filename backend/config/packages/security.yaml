@@ -20,6 +20,7 @@ security:
                 - App\Security\ApiTokenAuthenticator
 
     access_control:
+        - { path: ^/api/health$, roles: PUBLIC_ACCESS }
         - { path: ^/api/auth/me$, roles: IS_AUTHENTICATED_FULLY }
         - { path: ^/api/auth, roles: PUBLIC_ACCESS }
         - { path: ^/api, roles: IS_AUTHENTICATED_FULLY }

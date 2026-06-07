@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { DerivedKeys } from '../crypto'
 import { createVerificationBlob, deriveKeys, fromB64url, generateKdfSalt, toB64url, verifyBlob } from '../crypto'
 import {
   ApiError,
+  fetchHealth,
   getMe,
   loginFinish,
   passkeyLoginChallenge,
@@ -10,6 +11,7 @@ import {
   passkeyRegisterChallenge,
   passkeyRegisterFinish,
 } from '../api'
+import type { HealthService } from '../api'
 
 export type DateFormat = 'DMY-dot'
 
@@ -101,6 +103,36 @@ type Step = 'passkey' | 'passphrase' | 'register'
 export function AuthFlow({ mode, onAuth }: Props) {
   const [step, setStep]           = useState<Step>(mode === 'unlock' ? 'passphrase' : 'passkey')
   const [checking, setChecking]   = useState(false)
+  const [passkeyError, setPasskeyError] = useState<string | null>(null)
+  const [health, setHealth]       = useState<HealthService[] | null>(null)
+  const healthTimer = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    async function poll() {
+      const result = await fetchHealth()
+      if (cancelled) return
+      setHealth(result)
+      const allOk = result.every(s => s.status === 'ok')
+      healthTimer.current = setInterval(async () => {
+        const r = await fetchHealth()
+        if (cancelled) return
+        setHealth(r)
+        if (r.every(s => s.status === 'ok') && healthTimer.current) {
+          clearInterval(healthTimer.current)
+          healthTimer.current = setInterval(async () => {
+            const r2 = await fetchHealth()
+            if (!cancelled) setHealth(r2)
+          }, 15000)
+        }
+      }, allOk ? 15000 : 1000)
+    }
+    poll()
+    return () => {
+      cancelled = true
+      if (healthTimer.current) clearInterval(healthTimer.current)
+    }
+  }, [])
 
   // passphrase step
   const [pass, setPass]             = useState('')
@@ -126,21 +158,32 @@ export function AuthFlow({ mode, onAuth }: Props) {
   // ── Passkey click ─────────────────────────────────────────────────────
   async function handlePasskey() {
     setChecking(true)
+    setPasskeyError(null)
     try {
       // 1. Get challenge from server
       const opts = await passkeyLoginChallenge()
 
       // 2. Ask authenticator (1Password, Touch ID, etc.)
-      const credential = await navigator.credentials.get({
-        publicKey: {
-          challenge:        fromB64url(opts.challenge),
-          rpId:             opts.rpId,
-          timeout:          opts.timeout,
-          userVerification: 'preferred',
-        },
-      }) as PublicKeyCredential | null
+      let credential: PublicKeyCredential | null
+      try {
+        credential = await navigator.credentials.get({
+          publicKey: {
+            challenge:        fromB64url(opts.challenge),
+            rpId:             opts.rpId,
+            timeout:          opts.timeout,
+            userVerification: 'preferred',
+          },
+        }) as PublicKeyCredential | null
+      } catch (err) {
+        // User cancelled or no passkey available → go to register
+        if (err instanceof DOMException && (err.name === 'NotAllowedError' || err.name === 'AbortError')) {
+          setStep('register')
+          return
+        }
+        throw err
+      }
 
-      if (!credential) throw new Error('No credential returned')
+      if (!credential) { setStep('register'); return }
 
       const assertionResp = credential.response as AuthenticatorAssertionResponse
       const uh = assertionResp.userHandle
@@ -160,9 +203,8 @@ export function AuthFlow({ mode, onAuth }: Props) {
       } else {
         setStep('register')
       }
-    } catch {
-      // No passkeys for this site, or user cancelled → show registration
-      setStep('register')
+    } catch (err) {
+      setPasskeyError(err instanceof ApiError ? err.message : 'Something went wrong — try again')
     } finally {
       setChecking(false)
     }
@@ -313,6 +355,8 @@ export function AuthFlow({ mode, onAuth }: Props) {
               {checking ? 'Checking…' : 'Sign in with passkey'}
             </button>
 
+            {passkeyError && <ErrorBox msg={passkeyError} />}
+
             <div style={{
               display: 'flex', alignItems: 'flex-start', gap: 10,
               background: 'var(--s2)', border: '1px solid var(--border)',
@@ -422,6 +466,37 @@ export function AuthFlow({ mode, onAuth }: Props) {
             </button>
           </form>
         )}
+        <div style={{ width: '100%', marginTop: 24, borderTop: '1px solid var(--border)', paddingTop: 14 }}>
+          {health === null ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, color: 'var(--muted)' }}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"
+                style={{ width: 12, height: 12, flexShrink: 0, animation: 'spin 0.7s linear infinite' }}>
+                <path d="M12 3a9 9 0 1 0 9 9"/>
+              </svg>
+              Checking system status…
+            </div>
+          ) : health.every(s => s.status === 'ok') ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, color: '#34c759' }}>
+              <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#34c759', flexShrink: 0 }} />
+              All systems operational
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.5px', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 2 }}>
+                System status
+              </div>
+              {health.map(s => (
+                <div key={s.name} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
+                  <div style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, background: s.status === 'ok' ? '#34c759' : '#ff3b30' }} />
+                  <span style={{ color: 'var(--muted)', textTransform: 'capitalize' }}>{s.name}</span>
+                  <span style={{ marginLeft: 'auto', color: s.status === 'ok' ? '#34c759' : '#ff3b30' }}>
+                    {s.status === 'ok' ? 'ok' : 'error'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )

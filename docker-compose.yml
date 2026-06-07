@@ -6,8 +6,11 @@ services:
 
   # ── PostgreSQL ─────────────────────────────────────────────────────────
   db:
+    container_name: timeline-db
     image: postgres:16-alpine
     restart: unless-stopped
+    networks:
+      - timeline_network
     environment:
       POSTGRES_DB:       ${POSTGRES_DB:-timeline}
       POSTGRES_USER:     ${POSTGRES_USER:-timeline}
@@ -24,6 +27,7 @@ services:
 
   # ── Symfony (PHP-FPM) ──────────────────────────────────────────────────
   php:
+    container_name: timeline-php
     build:
       context: .
       dockerfile: docker/php/Dockerfile
@@ -33,7 +37,7 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    entrypoint: ["sh", "-c", "mkdir -p /var/www/html/var/cache /var/www/html/var/tmp /var/www/html/var/log && chown -R www-data:www-data /var/www/html/var && exec php-fpm"]
+    entrypoint: ["sh", "-c", "mkdir -p /var/www/html/var/cache /var/www/html/var/tmp /var/www/html/var/log /var/www/html/public/covers && chown -R www-data:www-data /var/www/html/var /var/www/html/public/covers && exec php-fpm"]
     environment:
       APP_ENV:                ${APP_ENV:-dev}
       APP_SECRET:             ${APP_SECRET:-changethis_min32chars_xxxxxxxxxxx}
@@ -42,9 +46,13 @@ services:
       CORS_ALLOW_ORIGIN:      ${CORS_ALLOW_ORIGIN:-'^https?://(localhost|127\.0\.0\.1)(:[0-9]+)?$'}
       WEBAUTHN_RP_ID:         ${WEBAUTHN_RP_ID:-localhost}
       WEBAUTHN_RP_NAME:       ${WEBAUTHN_RP_NAME:-Timeline}
+    networks:
+      - timeline_network
+      - proxy # makes calls to http://audiobookshelf internal url on the docker network
 
   # ── Nginx (serves Symfony public/) ────────────────────────────────────
   nginx:
+    container_name: timeline-nginx
     image: nginx:1.25-alpine
     restart: unless-stopped
     volumes:
@@ -53,7 +61,7 @@ services:
     depends_on:
       - php
     networks:
-      - default
+      - timeline_network
       - proxy
     labels:
       - "traefik.enable=true"
@@ -65,6 +73,7 @@ services:
 
   # ── React / Vite dev server ────────────────────────────────────────────
   frontend:
+    container_name: timeline-frontend
     build:
       context: .
       dockerfile: docker/node/Dockerfile
@@ -75,7 +84,6 @@ services:
     environment:
       VITE_API_URL: "https://api.timeline.michondr.space"
     networks:
-      - default
       - proxy
     labels:
       - "traefik.enable=true"
@@ -87,6 +95,7 @@ services:
 
   # ── Symfony Messenger worker ───────────────────────────────────────────
   messenger:
+    container_name: timeline-messenger
     build:
       context: .
       dockerfile: docker/php/Dockerfile
@@ -102,11 +111,15 @@ services:
       APP_SECRET:             ${APP_SECRET:-changethis_min32chars_xxxxxxxxxxx}
       DATABASE_URL:            *db-url
       MESSENGER_TRANSPORT_DSN: *db-url
+    networks:
+      - timeline_network
+      - proxy
 
 volumes:
   db_data:
   fe_modules:
 
 networks:
+  timeline_network:
   proxy:
     external: true

@@ -58,6 +58,17 @@ export function useTimelineView(today: Date) {
     })
   }, [today])
 
+  // Continuous zoom by a raw multiplier (used for pinch-to-zoom on touch)
+  const zoomBy = useCallback((factor: number, mouseRatio: number) => {
+    setView(prev => {
+      const span    = prev.endMs - prev.startMs
+      const focusMs = prev.startMs + mouseRatio * span
+      const newSpan = Math.max(7 * DAY_MS, Math.min(120 * 365 * DAY_MS, span * factor))
+      const startMs = focusMs - mouseRatio * newSpan
+      return { startMs, endMs: startMs + newSpan }
+    })
+  }, [])
+
   // Move the view so `centerMs` is in the middle, keeping the current span
   const seekTo = useCallback((centerMs: number) => {
     setView(prev => {
@@ -66,5 +77,5 @@ export function useTimelineView(today: Date) {
     })
   }, [])
 
-  return { view, setView, setPreset, pan, zoom, fitRange, setSpan, seekTo }
+  return { view, setView, setPreset, pan, zoom, zoomBy, fitRange, setSpan, seekTo }
 }

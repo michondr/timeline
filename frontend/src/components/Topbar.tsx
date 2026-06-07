@@ -1,5 +1,5 @@
-import React, { useRef, useState } from 'react'
-import type { HabitIntegration, ViewState } from '../types'
+import React, { useEffect, useRef, useState } from 'react'
+import type { AbsIntegration, HabitIntegration, ViewState } from '../types'
 import { useIsMobile } from '../hooks/useIsMobile'
 
 const DAY_MS = 86_400_000
@@ -32,6 +32,7 @@ interface Props {
   todoCount: number
   todosLoading: boolean
   habitIntegration: HabitIntegration | null
+  absIntegration: AbsIntegration | null
   view: ViewState
   today: Date
   birthdate: Date
@@ -42,7 +43,10 @@ interface Props {
   onCategories: () => void
   onExport: () => void
   onHabitSettings: () => void
-  onHabitSync: () => void
+  onHabitSync: () => Promise<void>
+  onAbsSettings: () => void
+  onAbsSync: () => Promise<void>
+  onRefresh: () => void
   onSetSpan: (spanMs: number) => void
   onSeek: (centerMs: number) => void
 }
@@ -141,7 +145,7 @@ function Scrollbar({ ticks, thumbStart, thumbEnd, onSeek }: {
   )
 }
 
-export function Topbar({ pendingCount, todoCount, todosLoading, habitIntegration, view, today: _today, birthdate, panEndMs, onNewEvent, onPending, onTodos, onCategories, onExport, onHabitSettings, onHabitSync, onSetSpan, onSeek }: Props) {
+export function Topbar({ pendingCount, todoCount, todosLoading, habitIntegration, absIntegration, view, today, birthdate, panEndMs, onNewEvent, onPending, onTodos, onCategories, onExport, onHabitSettings, onHabitSync, onAbsSettings, onAbsSync, onRefresh, onSetSpan, onSeek }: Props) {
   const isMobile  = useIsMobile()
   const [menuOpen, setMenuOpen] = useState(false)
   const menuTimer  = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -195,6 +199,7 @@ export function Topbar({ pendingCount, todoCount, todosLoading, habitIntegration
       <header style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)', flexShrink: 0, zIndex: 5 }}>
         <div style={{ height: 48, display: 'flex', alignItems: 'center', padding: '0 14px', gap: 8 }}>
           {logo}
+          <button onClick={onRefresh} title="Reload data" style={{ background: 'none', border: 'none', color: 'var(--muted)', fontSize: 15, padding: '4px 6px', cursor: 'pointer' }}>↻</button>
           <div style={{ flex: 1 }} />
           <button onClick={onPending} style={{ ...(pendingCount > 0 ? btnWarn : btnGhost), padding: '6px 10px', gap: 5 }}>
             ⚠{pendingCount > 0 && <>{' '}{badge(pendingCount)}</>}
@@ -206,6 +211,7 @@ export function Topbar({ pendingCount, todoCount, todosLoading, habitIntegration
             </button>
           )}
           <SyncWidget integration={habitIntegration} onOpen={onHabitSettings} onSync={onHabitSync} compact />
+          <AbsSyncWidget integration={absIntegration} onOpen={onAbsSettings} onSync={onAbsSync} compact />
           <button onClick={onNewEvent} style={{ ...btnPrimary, padding: '6px 14px' }}>+ New</button>
         </div>
         <div style={{ height: 34, display: 'flex', alignItems: 'center', padding: '0 14px', borderTop: '1px solid var(--border)' }}>
@@ -234,8 +240,9 @@ export function Topbar({ pendingCount, todoCount, todosLoading, habitIntegration
       flexShrink: 0, zIndex: 5,
     }}>
       {logo}
+      <button onClick={onRefresh} title="Reload data" style={{ background: 'none', border: 'none', color: 'var(--muted)', fontSize: 15, padding: '4px 6px', cursor: 'pointer', marginLeft: 4 }}>↻</button>
 
-      <div style={{ width: 12, flexShrink: 0 }} />
+      <div style={{ width: 8, flexShrink: 0 }} />
       <Divider />
 
       <Scrollbar
@@ -252,11 +259,24 @@ export function Topbar({ pendingCount, todoCount, todosLoading, habitIntegration
         onSeek={r => onSeek(panMin + r * panRange)}
       />
 
+      <button
+        onClick={() => onSeek(today.getTime())}
+        title="Jump to today"
+        style={{
+          background: 'none', border: '1px solid var(--border)', borderRadius: 5,
+          color: 'var(--muted)', fontSize: 11, padding: '3px 8px',
+          cursor: 'pointer', flexShrink: 0, marginRight: 8,
+        }}
+      >now</button>
+
       <Divider />
       <div style={{ width: 10, flexShrink: 0 }} />
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
         <SyncWidget integration={habitIntegration} onOpen={onHabitSettings} onSync={onHabitSync} />
+        <Divider />
+        <AbsSyncWidget integration={absIntegration} onOpen={onAbsSettings} onSync={onAbsSync} />
+        <Divider />
         <button onClick={onPending} style={pendingCount > 0 ? btnWarn : btnGhost}>
           ⚠ Pending{pendingCount > 0 && <>{' '}{badge(pendingCount)}</>}
         </button>
@@ -304,18 +324,66 @@ const dropItem: React.CSSProperties   = {
   color: 'var(--text)', fontSize: 13, cursor: 'pointer',
 }
 
+function useSyncState(onSync: () => Promise<void>) {
+  const [syncing, setSyncing]       = useState(false)
+  const [flash, setFlash]           = useState<'ok' | 'error' | null>(null)
+  const [flashError, setFlashError] = useState<string | null>(null)
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => () => { if (timer.current) clearTimeout(timer.current) }, [])
+
+  async function trigger() {
+    if (syncing) return
+    setSyncing(true)
+    setFlash(null)
+    setFlashError(null)
+    try {
+      await onSync()
+      setFlash('ok')
+    } catch (e) {
+      setFlash('error')
+      setFlashError(e instanceof Error ? e.message : 'Sync failed')
+    } finally {
+      setSyncing(false)
+      if (timer.current) clearTimeout(timer.current)
+      timer.current = setTimeout(() => { setFlash(null); setFlashError(null) }, 2500)
+    }
+  }
+
+  return { syncing, flash, flashError, trigger }
+}
+
+function SyncButton({ syncing, flash, onClick }: { syncing: boolean; flash: 'ok' | 'error' | null; onClick: () => void }) {
+  const col = flash === 'ok' ? '#34c759' : flash === 'error' ? '#ff3b30' : 'var(--muted)'
+  return (
+    <button
+      onClick={onClick}
+      disabled={syncing}
+      style={{
+        background: 'none',
+        border: `1px solid ${flash ? col : 'var(--border)'}`,
+        borderRadius: 5, color: col, fontSize: 13,
+        padding: '1px 5px', cursor: syncing ? 'default' : 'pointer', lineHeight: 1,
+      }}
+    >
+      <span style={{ display: 'inline-block', animation: syncing ? 'spin 0.7s linear infinite' : 'none' }}>↻</span>
+    </button>
+  )
+}
+
 function SyncWidget({ integration, onOpen, onSync, compact = false }: {
   integration: HabitIntegration | null
   onOpen: () => void
-  onSync: () => void
+  onSync: () => Promise<void>
   compact?: boolean
 }) {
-  const dotColor = !integration?.hasToken
-    ? 'var(--muted)'
-    : integration.lastRunStatus === 'ok'
-    ? '#34c759'
-    : integration.lastRunStatus === 'error'
-    ? '#ff3b30'
+  const { syncing, flash, flashError, trigger } = useSyncState(onSync)
+
+  const dotColor = flash === 'ok' ? '#34c759'
+    : flash === 'error' ? '#ff3b30'
+    : !integration?.hasToken ? 'var(--muted)'
+    : integration.lastRunStatus === 'ok' ? '#34c759'
+    : integration.lastRunStatus === 'error' ? '#ff3b30'
     : 'var(--muted)'
 
   const label = !integration?.hasToken
@@ -325,20 +393,67 @@ function SyncWidget({ integration, onOpen, onSync, compact = false }: {
     : 'TickTick · never'
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--muted)' }}>
-      <div
-        onClick={onOpen}
-        style={{ width: 7, height: 7, borderRadius: '50%', background: dotColor, flexShrink: 0, cursor: 'pointer' }}
-      />
+    <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--muted)' }}>
+      <div onClick={onOpen} style={{ width: 7, height: 7, borderRadius: '50%', background: dotColor, flexShrink: 0, cursor: 'pointer' }} />
       {!compact && (
         <button onClick={onOpen} style={{ background: 'none', border: 'none', color: 'var(--muted)', fontSize: 12, padding: 0, cursor: 'pointer' }}>
           {label}
         </button>
       )}
-      {integration?.hasToken && (
-        <button onClick={onSync} style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 5, color: 'var(--muted)', fontSize: 11, padding: '2px 6px', cursor: 'pointer' }}>
-          ↻
+      {integration?.hasToken && <SyncButton syncing={syncing} flash={flash} onClick={trigger} />}
+      {flash === 'error' && flashError && (
+        <div style={{
+          position: 'absolute', top: '100%', left: 0, marginTop: 6, zIndex: 20,
+          background: 'var(--surface)', border: '1px solid rgba(255,59,48,0.4)',
+          borderRadius: 6, padding: '6px 10px', fontSize: 11, color: '#ff6b6b',
+          whiteSpace: 'nowrap', boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+        }}>
+          {flashError}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function AbsSyncWidget({ integration, onOpen, onSync, compact = false }: {
+  integration: AbsIntegration | null
+  onOpen: () => void
+  onSync: () => Promise<void>
+  compact?: boolean
+}) {
+  const { syncing, flash, flashError, trigger } = useSyncState(onSync)
+
+  const dotColor = flash === 'ok' ? '#34c759'
+    : flash === 'error' ? '#ff3b30'
+    : !integration?.hasCredentials ? 'var(--muted)'
+    : integration.lastRunStatus === 'ok' ? '#34c759'
+    : integration.lastRunStatus === 'error' ? '#ff3b30'
+    : 'var(--muted)'
+
+  const label = !integration?.hasCredentials
+    ? 'ABS'
+    : integration.lastRunAt
+    ? `ABS · ${formatAgo(integration.lastRunAt)}`
+    : 'ABS · never'
+
+  return (
+    <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--muted)' }}>
+      <div onClick={onOpen} style={{ width: 7, height: 7, borderRadius: '50%', background: dotColor, flexShrink: 0, cursor: 'pointer' }} />
+      {!compact && (
+        <button onClick={onOpen} style={{ background: 'none', border: 'none', color: 'var(--muted)', fontSize: 12, padding: 0, cursor: 'pointer' }}>
+          {label}
         </button>
+      )}
+      {integration?.hasCredentials && <SyncButton syncing={syncing} flash={flash} onClick={trigger} />}
+      {flash === 'error' && flashError && (
+        <div style={{
+          position: 'absolute', top: '100%', left: 0, marginTop: 6, zIndex: 20,
+          background: 'var(--surface)', border: '1px solid rgba(255,59,48,0.4)',
+          borderRadius: 6, padding: '6px 10px', fontSize: 11, color: '#ff6b6b',
+          whiteSpace: 'nowrap', boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+        }}>
+          {flashError}
+        </div>
       )}
     </div>
   )

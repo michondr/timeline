@@ -26,6 +26,23 @@ async function json<T>(r: Response): Promise<T> {
   return body as T
 }
 
+// ── Health ────────────────────────────────────────────────────────────────────
+
+export interface HealthService {
+  name: string
+  status: 'ok' | 'error'
+}
+
+export async function fetchHealth(): Promise<HealthService[]> {
+  try {
+    const r = await fetch(BASE + '/health')
+    const body = await r.json()
+    return body.services ?? []
+  } catch {
+    return [{ name: 'backend', status: 'error' }]
+  }
+}
+
 // ── Passkey auth ──────────────────────────────────────────────────────────────
 
 export async function passkeyLoginChallenge() {
@@ -172,6 +189,45 @@ export async function saveHabitToken(sessionToken: string) {
 
 export async function triggerHabitSync() {
   return json<{ ok: boolean }>(await req('/habits/sync', { method: 'POST' }))
+}
+
+// ── Audiobookshelf ────────────────────────────────────────────────────────────
+
+export interface RawAbsIntegration {
+  hasCredentials: boolean
+  url: string
+  lastRunAt: string | null
+  lastRunStatus: 'ok' | 'error' | null
+  lastRunError: string | null
+}
+
+export interface RawBook {
+  id: string
+  absItemId: string
+  title: string
+  author: string | null
+  startedAt: string | null
+  finishedAt: string | null
+  isFinished: boolean
+  currentTime: number | null
+}
+
+export async function fetchAbsIntegration() {
+  return json<RawAbsIntegration>(await req('/abs/integration'))
+}
+
+export async function saveAbsIntegration(url: string, token: string) {
+  return json<{ ok: boolean }>(
+    await req('/abs/integration', { method: 'PUT', body: JSON.stringify({ url, token }) }),
+  )
+}
+
+export async function triggerAbsSync() {
+  return json<{ ok: boolean }>(await req('/abs/sync', { method: 'POST' }))
+}
+
+export async function fetchBooks() {
+  return json<RawBook[]>(await req('/abs/books'))
 }
 
 // ── TickTick todos ────────────────────────────────────────────────────────────

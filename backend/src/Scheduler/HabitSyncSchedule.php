@@ -2,7 +2,9 @@
 
 namespace App\Scheduler;
 
+use App\Entity\AbsIntegration;
 use App\Entity\HabitSync;
+use App\Message\SyncAbsMessage;
 use App\Message\SyncTickTickMessage;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Scheduler\Attribute\AsSchedule;
@@ -27,6 +29,11 @@ class HabitSyncSchedule implements ScheduleProviderInterface
             }
             $userId = $sync->getUser()->getId();
             $schedule->add(RecurringMessage::cron('0 * * * *', new SyncTickTickMessage($userId)));
+        }
+
+        foreach ($this->em->getRepository(AbsIntegration::class)->findAll() as $i) {
+            if (!$i->getUrl() || !$i->getToken()) continue;
+            $schedule->add(RecurringMessage::cron('30 * * * *', new SyncAbsMessage($i->getUser()->getId())));
         }
 
         return $schedule;
