@@ -104,10 +104,12 @@ export function Timeline({ view, today, birthdate, categories, events, habits, s
   const toX   = (t: number) => PAD + ((t - view.startMs) / span) * TL_W
   const dateX = (d: Date)   => toX(d.getTime())
 
-  const AXIS_Y   = Math.round(h * 0.42)
-  const OPEN_Y   = Math.round(h * 0.07)
-  const HABITS_Y = AXIS_Y + Math.round(h * 0.18)
-  const BOOKS_Y  = AXIS_Y + Math.round(h * 0.32)
+  const AXIS_Y     = Math.round(h * 0.42)
+  const OPEN_Y     = Math.round(h * 0.07)
+  const HABITS_Y   = AXIS_Y + 32
+  const HABITS_H   = showHabits && habits.length > 0 ? habits.length * 22 + 10 : 0
+  const HABITS_SEP = HABITS_Y + HABITS_H + 4
+  const BOOKS_Y    = HABITS_SEP + 20
 
   function clamp(v: number, lo: number, hi: number) { return Math.max(lo, Math.min(hi, v)) }
 
@@ -129,9 +131,8 @@ export function Timeline({ view, today, birthdate, categories, events, habits, s
   const grid = getGridDates(view.startMs, view.endMs)
   const pieces: string[] = []
 
-  // Zone separators
-  pieces.push(`<line x1="0" y1="${HABITS_Y - 14}" x2="${w}" y2="${HABITS_Y - 14}" stroke="#1c1c1e" stroke-width="1"/>`)
-  pieces.push(`<line x1="0" y1="${BOOKS_Y - 14}" x2="${w}" y2="${BOOKS_Y - 14}" stroke="#1c1c1e" stroke-width="1"/>`)
+  // Separator under habits (above books)
+  pieces.push(`<line x1="0" y1="${HABITS_SEP}" x2="${w}" y2="${HABITS_SEP}" stroke="#1c1c1e" stroke-width="1"/>`)
 
   // Grid lines
   grid.forEach(({ date, major }) => {
@@ -245,6 +246,7 @@ export function Timeline({ view, today, birthdate, categories, events, habits, s
     const col    = catById(ev.categoryId).color
     const y      = OPEN_Y + 10 + i * 38
     const labelY = y - 8
+    rangeEvYPos.set(ev.id, y)
 
     if (!ev.startDate && ev.endDate) {
       // End-only: arrow from left edge pointing toward end date
@@ -543,8 +545,8 @@ export function Timeline({ view, today, birthdate, categories, events, habits, s
   const zones = [
     { label: 'open',   top: OPEN_Y + 12 },
     { label: 'axis',   top: AXIS_Y },
-    { label: 'habits', top: HABITS_Y + 30 },
-    { label: 'books',  top: BOOKS_Y + 28 },
+    { label: 'habits', top: HABITS_Y + Math.max(10, HABITS_H / 2) },
+    { label: 'books',  top: BOOKS_Y + 20 },
   ]
 
   // ── Event handlers on SVG ─────────────────────────────────────────────────
@@ -733,7 +735,7 @@ export function Timeline({ view, today, birthdate, categories, events, habits, s
         <svg
           ref={svgRef}
           style={isMobile
-            ? { display: 'block', width: '100%', height: Math.max(h, BOOKS_Y + 60 + habits.length * 22), cursor: 'grab' }
+            ? { display: 'block', width: '100%', height: Math.max(h, BOOKS_Y + 60), cursor: 'grab' }
             : { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', cursor: dragRef.current ? 'grabbing' : 'grab' }
           }
           onMouseDown={handleMouseDown}

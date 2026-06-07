@@ -20,6 +20,16 @@ export function PendingPanel({ events, categories, open, onClose, onSelect }: Pr
   const catById = (id: string) => categories.find(c => c.id === id)
 
   return (
+    <>
+      {open && (
+        <div
+          onClick={onClose}
+          style={{
+            position: 'absolute', inset: 0, zIndex: 24,
+            background: 'rgba(0,0,0,0.35)',
+          }}
+        />
+      )}
     <aside style={{
       position: 'absolute', right: 0, top: 0, bottom: 0,
       width: isMobile ? '100%' : 360,
@@ -73,5 +83,6 @@ export function PendingPanel({ events, categories, open, onClose, onSelect }: Pr
         })}
       </div>
     </aside>
+    </>
   )
 }

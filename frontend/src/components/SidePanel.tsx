@@ -150,9 +150,11 @@ export function SidePanel({ event, categories, events, isNew, defaultCategoryId,
                 style={{ ...fiStyle, appearance: 'none' }}
               >
                 <option value="">— none —</option>
-                {events.filter(e => e.type === 'range').map(e => (
-                  <option key={e.id} value={e.id}>{e.name}</option>
-                ))}
+                {events
+                  .filter(e => (e.type === 'range' || e.type === 'open') && e.categoryId === categoryId)
+                  .map(e => (
+                    <option key={e.id} value={e.id}>{e.name}{e.type === 'open' ? ' (open)' : ''}</option>
+                  ))}
               </select>
             </Field>
           )}

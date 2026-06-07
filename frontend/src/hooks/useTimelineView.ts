@@ -38,7 +38,7 @@ export function useTimelineView(today: Date) {
       const span     = prev.endMs - prev.startMs
       const focusMs  = prev.startMs + mouseRatio * span
       const factor   = deltaY > 0 ? 1.06 : 1 / 1.06
-      const newSpan  = Math.max(2 * DAY_MS, Math.min(120 * 365 * DAY_MS, span * factor))
+      const newSpan  = Math.max(7 * DAY_MS, Math.min(120 * 365 * DAY_MS, span * factor))
       const startMs  = focusMs - mouseRatio * newSpan
       return { startMs, endMs: startMs + newSpan }
     })
@@ -52,7 +52,7 @@ export function useTimelineView(today: Date) {
       const nowRatio = (nowMs - prev.startMs) / span
       const anchor   = nowRatio >= 0 && nowRatio <= 1 ? nowRatio : 0.5
       const anchorMs = prev.startMs + anchor * span
-      const clamped  = Math.max(2 * DAY_MS, Math.min(120 * 365 * DAY_MS, spanMs))
+      const clamped  = Math.max(7 * DAY_MS, Math.min(120 * 365 * DAY_MS, spanMs))
       const startMs  = anchorMs - anchor * clamped
       return { startMs, endMs: startMs + clamped }
     })
