@@ -33,6 +33,12 @@ export interface Habit {
   logs: Record<string, 'done' | 'skip' | 'fail'>  // date → status
 }
 
+export interface TickTickTodo {
+  id: string
+  title: string
+  projectId: string
+}
+
 export interface HabitIntegration {
   hasToken: boolean
   lastRunAt: string | null   // ISO

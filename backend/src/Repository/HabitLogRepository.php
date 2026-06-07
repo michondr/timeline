@@ -39,4 +39,15 @@ class HabitLogRepository extends ServiceEntityRepository
     {
         return $this->findOneBy(['habit' => $habit, 'date' => $date]);
     }
+
+    public function hasAnyLog(Habit $habit): bool
+    {
+        return $this->createQueryBuilder('l')
+            ->select('1')
+            ->where('l.habit = :habit')
+            ->setParameter('habit', $habit)
+            ->setMaxResults(1)
+            ->getQuery()
+            ->getOneOrNullResult() !== null;
+    }
 }

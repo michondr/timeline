@@ -132,23 +132,46 @@ class SyncTickTickHandler
 
         $this->em->flush();
 
-        // 3. Fetch checkins — go back 1 year or to earliest habit start
-        $earliest = new \DateTimeImmutable('-1 year');
-        foreach ($habits as $habit) {
-            if ($habit->getStartDate() && $habit->getStartDate() < $earliest) {
-                $earliest = $habit->getStartDate();
+        // 3. Fetch checkins — full history for new habits, last 14 days for existing ones
+        $postHeaders  = array_merge($baseHeaders, ['Content-Type: application/json;charset=UTF-8']);
+        $recentStamp  = (int) (new \DateTimeImmutable('-14 days'))->format('Ymd');
+
+        $newIds      = [];
+        $existingIds = [];
+        foreach ($habits as $ticktickId => $habit) {
+            if ($this->habitLogRepo->hasAnyLog($habit)) {
+                $existingIds[] = $ticktickId;
+            } else {
+                $newIds[] = $ticktickId;
             }
         }
 
-        $afterStamp   = (int) $earliest->format('Ymd');
-        $habitIds     = array_keys($habits);
-        $postHeaders  = array_merge($baseHeaders, ['Content-Type: application/json;charset=UTF-8']);
-        $body         = $this->curlPost(
-            self::API . '/api/v2/habitCheckins/query',
-            $postHeaders,
-            ['habitIds' => $habitIds, 'afterStamp' => $afterStamp],
-        );
-        $checkinMap   = $body['checkins'] ?? $body['habitRecords'] ?? [];
+        $checkinMap = [];
+
+        if (!empty($existingIds)) {
+            $body       = $this->curlPost(
+                self::API . '/api/v2/habitCheckins/query',
+                $postHeaders,
+                ['habitIds' => $existingIds, 'afterStamp' => $recentStamp],
+            );
+            $checkinMap = array_merge($checkinMap, $body['checkins'] ?? $body['habitRecords'] ?? []);
+        }
+
+        if (!empty($newIds)) {
+            $earliest = new \DateTimeImmutable('-10 years');
+            foreach ($newIds as $ticktickId) {
+                $sd = $habits[$ticktickId]->getStartDate();
+                if ($sd && $sd > $earliest) {
+                    $earliest = $sd;
+                }
+            }
+            $body       = $this->curlPost(
+                self::API . '/api/v2/habitCheckins/query',
+                $postHeaders,
+                ['habitIds' => $newIds, 'afterStamp' => (int) $earliest->format('Ymd')],
+            );
+            $checkinMap = array_merge($checkinMap, $body['checkins'] ?? $body['habitRecords'] ?? []);
+        }
 
         // 4. Upsert logs
         foreach ($checkinMap as $ticktickId => $checkins) {

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { Category, Habit, HabitIntegration, TimelineEvent } from './types'
+import type { Category, Habit, HabitIntegration, TickTickTodo, TimelineEvent } from './types'
 import type { DerivedKeys } from './crypto'
 import { decryptField, encryptField } from './crypto'
 import * as api from './api'
@@ -8,6 +8,8 @@ import { Topbar } from './components/Topbar'
 import { Timeline } from './components/Timeline'
 import { SidePanel } from './components/SidePanel'
 import { PendingPanel } from './components/PendingPanel'
+import { TodoPanel } from './components/TodoPanel'
+import { ToastProvider } from './components/Toast'
 import { CategoryPanel } from './components/CategoryPanel'
 import { HabitSettingsPanel } from './components/HabitSettingsPanel'
 import { FilterBar } from './components/FilterBar'
@@ -29,12 +31,15 @@ export default function App() {
   const [events, setEvents]         = useState<TimelineEvent[]>([])
 
   const [habits, setHabits]                   = useState<Habit[]>([])
+  const [todos, setTodos]                     = useState<TickTickTodo[]>([])
+  const [todosLoading, setTodosLoading]       = useState(false)
   const [habitIntegration, setHabitIntegration] = useState<HabitIntegration | null>(null)
   const [habitSettingsOpen, setHabitSettings]   = useState(false)
 
   const [editEvent, setEditEvent]       = useState<TimelineEvent | null>(null)
   const [isNewEvent, setIsNewEvent]     = useState(false)
   const [pendingOpen, setPendingOpen]   = useState(false)
+  const [todoOpen, setTodoOpen]         = useState(false)
   const [catModalOpen, setCatModal]     = useState(false)
   const [activePreset, setActivePreset] = useState(12)
 
@@ -139,6 +144,23 @@ export default function App() {
     api.fetchHabitIntegration().then(setHabitIntegration).catch(() => {})
   }, [phase])
 
+  // ── Load todos when integration is confirmed active ────────────────────
+  useEffect(() => {
+    if (phase !== 'ready' || !habitIntegration?.hasToken) return
+    setTodosLoading(true)
+    api.fetchTodos().then(setTodos).catch(() => {}).finally(() => setTodosLoading(false))
+  }, [phase, habitIntegration?.hasToken])
+
+  async function handleTodoDone(id: string, projectId: string) {
+    await api.completeTodo(id, projectId)
+    setTodos(prev => prev.filter(t => t.id !== id))
+  }
+
+  async function handleTodoWontDo(id: string, projectId: string) {
+    await api.abandonTodo(id, projectId)
+    setTodos(prev => prev.filter(t => t.id !== id))
+  }
+
   // ── Visibility controls ───────────────────────────────────────────────
   function setHabitsVis(v: boolean) { setShowHabits(v); localStorage.setItem('timeline_show_habits', String(v)) }
   function setBooksVis(v: boolean)  { setShowBooks(v);  localStorage.setItem('timeline_show_books',  String(v)) }
@@ -173,7 +195,10 @@ export default function App() {
   async function handleHabitSync() {
     await api.triggerHabitSync()
     setTimeout(async () => {
-      const integration = await api.fetchHabitIntegration()
+      const [integration] = await Promise.all([
+        api.fetchHabitIntegration(),
+        api.fetchTodos().then(setTodos).catch(() => {}),
+      ])
       setHabitIntegration(integration)
     }, 3000)
   }
@@ -192,7 +217,7 @@ export default function App() {
       const tag = (e.target as HTMLElement).tagName
       const typing = tag === 'INPUT' || tag === 'TEXTAREA'
       if (e.key === 'Escape') {
-        setEditEvent(null); setIsNewEvent(false); setPendingOpen(false); setCatModal(false); setFilterOpen(false)
+        setEditEvent(null); setIsNewEvent(false); setPendingOpen(false); setTodoOpen(false); setCatModal(false); setFilterOpen(false)
         return
       }
       if (typing || filterOpen) return
@@ -223,7 +248,7 @@ export default function App() {
   }, [filterOpen, pan, setSpan])
 
   function openNew() {
-    setEditEvent(null); setIsNewEvent(true); setPendingOpen(false)
+    setEditEvent(null); setIsNewEvent(true); setPendingOpen(false); setTodoOpen(false)
   }
 
   // Zoom/pan the viewport so every matching event fits in view
@@ -249,11 +274,11 @@ export default function App() {
 
   function handleEventClick(id: string) {
     const ev = events.find(e => e.id === id)
-    if (ev) { setEditEvent(ev); setIsNewEvent(false); setPendingOpen(false) }
+    if (ev) { setEditEvent(ev); setIsNewEvent(false); setPendingOpen(false); setTodoOpen(false) }
   }
 
   function handleEditEventFromCat(ev: TimelineEvent) {
-    setEditEvent(ev); setIsNewEvent(false); setPendingOpen(false)
+    setEditEvent(ev); setIsNewEvent(false); setPendingOpen(false); setTodoOpen(false)
   }
 
   // ── Command palette dispatch (keywords typed in the filter input) ──────
@@ -311,7 +336,7 @@ export default function App() {
   }
 
   function closeAll() {
-    setEditEvent(null); setIsNewEvent(false); setPendingOpen(false); setCatModal(false); setHabitSettings(false)
+    setEditEvent(null); setIsNewEvent(false); setPendingOpen(false); setTodoOpen(false); setCatModal(false); setHabitSettings(false)
   }
 
   async function handleSave(patch: Partial<TimelineEvent> & { id?: string }) {
@@ -421,16 +446,19 @@ export default function App() {
 
   // ── Timeline ──────────────────────────────────────────────────────────
   return (
-    <>
+    <ToastProvider>
       <Topbar
         pendingCount={pendingEvents.length}
+        todoCount={todos.length}
+        todosLoading={todosLoading}
         habitIntegration={habitIntegration}
         view={view}
         today={TODAY}
         birthdate={birthdate}
         panEndMs={panEndMs}
         onNewEvent={openNew}
-        onPending={() => setPendingOpen(p => !p)}
+        onPending={() => { setTodoOpen(false); setPendingOpen(p => !p) }}
+        onTodos={() => { setPendingOpen(false); setTodoOpen(t => !t) }}
         onCategories={() => { setCatAutoFocusNew(false); setCatExpandId(null); setCatModal(c => !c) }}
         onExport={handleExport}
         onHabitSettings={() => { closeAll(); setHabitSettings(true) }}
@@ -475,6 +503,14 @@ export default function App() {
           open={pendingOpen}
           onClose={() => setPendingOpen(false)}
           onSelect={ev => { setEditEvent(ev); setIsNewEvent(false); setPendingOpen(false) }}
+        />
+
+        <TodoPanel
+          todos={todos}
+          open={todoOpen}
+          onClose={() => setTodoOpen(false)}
+          onDone={handleTodoDone}
+          onWontDo={handleTodoWontDo}
         />
 
         <CategoryPanel
@@ -541,6 +577,6 @@ export default function App() {
           </button>
         )}
       </div>
-    </>
+    </ToastProvider>
   )
 }

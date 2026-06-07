@@ -1,4 +1,4 @@
-import React, { useRef } from 'react'
+import React, { useRef, useState } from 'react'
 import type { HabitIntegration, ViewState } from '../types'
 import { useIsMobile } from '../hooks/useIsMobile'
 
@@ -29,6 +29,8 @@ const MOBILE_SPANS = [
 
 interface Props {
   pendingCount: number
+  todoCount: number
+  todosLoading: boolean
   habitIntegration: HabitIntegration | null
   view: ViewState
   today: Date
@@ -36,6 +38,7 @@ interface Props {
   panEndMs: number
   onNewEvent: () => void
   onPending: () => void
+  onTodos: () => void
   onCategories: () => void
   onExport: () => void
   onHabitSettings: () => void
@@ -54,11 +57,11 @@ const logo = (
   </div>
 )
 
-const badge = (n: number) => (
+const badge = (n: number, color = 'var(--warn)') => (
   <span style={{
     display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
     minWidth: 18, height: 18, padding: '0 5px', borderRadius: 9,
-    background: 'var(--warn)', color: '#000', fontSize: 10, fontWeight: 700,
+    background: color, color: '#000', fontSize: 10, fontWeight: 700,
   }}>{n}</span>
 )
 
@@ -138,8 +141,13 @@ function Scrollbar({ ticks, thumbStart, thumbEnd, onSeek }: {
   )
 }
 
-export function Topbar({ pendingCount, habitIntegration, view, today: _today, birthdate, panEndMs, onNewEvent, onPending, onCategories, onExport, onHabitSettings, onHabitSync, onSetSpan, onSeek }: Props) {
-  const isMobile = useIsMobile()
+export function Topbar({ pendingCount, todoCount, todosLoading, habitIntegration, view, today: _today, birthdate, panEndMs, onNewEvent, onPending, onTodos, onCategories, onExport, onHabitSettings, onHabitSync, onSetSpan, onSeek }: Props) {
+  const isMobile  = useIsMobile()
+  const [menuOpen, setMenuOpen] = useState(false)
+  const menuTimer  = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  function openMenu()  { if (menuTimer.current) clearTimeout(menuTimer.current); setMenuOpen(true) }
+  function closeMenu() { menuTimer.current = setTimeout(() => setMenuOpen(false), 120) }
 
   // Pan scrollbar: birthdate → latest range event end (or today+1y)
   const birthYear = birthdate.getFullYear()
@@ -188,14 +196,16 @@ export function Topbar({ pendingCount, habitIntegration, view, today: _today, bi
         <div style={{ height: 48, display: 'flex', alignItems: 'center', padding: '0 14px', gap: 8 }}>
           {logo}
           <div style={{ flex: 1 }} />
-          {pendingCount > 0 && (
-            <button onClick={onPending} style={{ ...btnWarn, padding: '6px 10px', gap: 5 }}>
-              ⚠ {badge(pendingCount)}
+          <button onClick={onPending} style={{ ...(pendingCount > 0 ? btnWarn : btnGhost), padding: '6px 10px', gap: 5 }}>
+            ⚠{pendingCount > 0 && <>{' '}{badge(pendingCount)}</>}
+          </button>
+          {habitIntegration?.hasToken && (
+            <button onClick={onTodos} style={{ ...(todoCount > 0 ? btnGreen : btnGhost), padding: '6px 10px', gap: 5 }}>
+              {todosLoading ? <span style={{ width: 12, height: 12, border: '2px solid currentColor', borderTopColor: 'transparent', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} /> : '⚠'}
+              {todoCount > 0 && <>{' '}{badge(todoCount, '#34c759')}</>}
             </button>
           )}
           <SyncWidget integration={habitIntegration} onOpen={onHabitSettings} onSync={onHabitSync} compact />
-          <button onClick={onCategories} style={{ ...btnGhost, padding: '6px 10px' }}>⊞</button>
-          <button onClick={onExport} style={{ ...btnGhost, padding: '6px 10px' }}>↓</button>
           <button onClick={onNewEvent} style={{ ...btnPrimary, padding: '6px 14px' }}>+ New</button>
         </div>
         <div style={{ height: 34, display: 'flex', alignItems: 'center', padding: '0 14px', borderTop: '1px solid var(--border)' }}>
@@ -247,14 +257,33 @@ export function Topbar({ pendingCount, habitIntegration, view, today: _today, bi
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
         <SyncWidget integration={habitIntegration} onOpen={onHabitSettings} onSync={onHabitSync} />
-        <button onClick={onCategories} style={btnGhost}>⊞ Categories</button>
-        <button onClick={onExport} style={btnGhost}>↓ Export</button>
-        {pendingCount > 0 && (
-          <button onClick={onPending} style={btnWarn}>
-            ⚠ Pending{' '}{badge(pendingCount)}
+        <button onClick={onPending} style={pendingCount > 0 ? btnWarn : btnGhost}>
+          ⚠ Pending{pendingCount > 0 && <>{' '}{badge(pendingCount)}</>}
+        </button>
+        {habitIntegration?.hasToken && (
+          <button onClick={onTodos} style={todoCount > 0 ? btnGreen : btnGhost}>
+            {todosLoading ? <span style={{ width: 12, height: 12, border: '2px solid currentColor', borderTopColor: 'transparent', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} /> : '⚠'}
+            {' '}Todos{todoCount > 0 && <>{' '}{badge(todoCount, '#34c759')}</>}
           </button>
         )}
-        <button onClick={onNewEvent} style={btnPrimary}>+ New event</button>
+        <div
+          style={{ position: 'relative' }}
+          onMouseEnter={openMenu}
+          onMouseLeave={closeMenu}
+        >
+          <button onClick={onNewEvent} style={btnPrimary}>+ New event</button>
+          {menuOpen && (
+            <div style={{
+              position: 'absolute', top: '100%', right: 0, marginTop: 4,
+              background: 'var(--surface)', border: '1px solid var(--border)',
+              borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.3)',
+              zIndex: 100, minWidth: 140, overflow: 'hidden',
+            }}>
+              <button onClick={() => { setMenuOpen(false); onCategories() }} style={dropItem}>⊞ Categories</button>
+              <button onClick={() => { setMenuOpen(false); onExport() }} style={dropItem}>↓ Export</button>
+            </div>
+          )}
+        </div>
       </div>
     </header>
   )
@@ -268,6 +297,12 @@ const base: React.CSSProperties = {
 const btnGhost: React.CSSProperties   = { ...base, borderColor: 'transparent', background: 'transparent', color: 'var(--muted)' }
 const btnPrimary: React.CSSProperties = { ...base, background: 'var(--accent)', borderColor: 'transparent', color: '#fff' }
 const btnWarn: React.CSSProperties    = { ...base, background: 'rgba(255,159,10,0.12)', borderColor: 'rgba(255,159,10,0.3)', color: 'var(--warn)' }
+const btnGreen: React.CSSProperties   = { ...base, background: 'rgba(52,199,89,0.12)', borderColor: 'rgba(52,199,89,0.3)', color: '#34c759' }
+const dropItem: React.CSSProperties   = {
+  display: 'block', width: '100%', padding: '9px 14px', textAlign: 'left',
+  background: 'none', border: 'none', borderBottom: '1px solid var(--border)',
+  color: 'var(--text)', fontSize: 13, cursor: 'pointer',
+}
 
 function SyncWidget({ integration, onOpen, onSync, compact = false }: {
   integration: HabitIntegration | null

@@ -173,3 +173,27 @@ export async function saveHabitToken(sessionToken: string) {
 export async function triggerHabitSync() {
   return json<{ ok: boolean }>(await req('/habits/sync', { method: 'POST' }))
 }
+
+// ── TickTick todos ────────────────────────────────────────────────────────────
+
+export interface RawTodo {
+  id: string
+  title: string
+  projectId: string
+}
+
+export async function fetchTodos() {
+  return json<RawTodo[]>(await req('/ticktick/todos'))
+}
+
+export async function completeTodo(id: string, projectId: string) {
+  return json<{ ok: boolean }>(
+    await req(`/ticktick/todos/${id}/done`, { method: 'POST', body: JSON.stringify({ projectId }) }),
+  )
+}
+
+export async function abandonTodo(id: string, projectId: string) {
+  return json<{ ok: boolean }>(
+    await req(`/ticktick/todos/${id}/wontdo`, { method: 'POST', body: JSON.stringify({ projectId }) }),
+  )
+}
