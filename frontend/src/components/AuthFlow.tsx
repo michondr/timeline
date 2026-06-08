@@ -105,6 +105,7 @@ export function AuthFlow({ mode, onAuth }: Props) {
   const [checking, setChecking]   = useState(false)
   const [passkeyError, setPasskeyError] = useState<string | null>(null)
   const [health, setHealth]       = useState<HealthService[] | null>(null)
+  const [healthExpanded, setHealthExpanded] = useState(false)
   const healthTimer = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => {
@@ -475,27 +476,31 @@ export function AuthFlow({ mode, onAuth }: Props) {
               </svg>
               Checking system status…
             </div>
-          ) : health.every(s => s.status === 'ok') ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, color: '#34c759' }}>
-              <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#34c759', flexShrink: 0 }} />
-              All systems operational
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.5px', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 2 }}>
-                System status
-              </div>
-              {health.map(s => (
-                <div key={s.name} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
-                  <div style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, background: s.status === 'ok' ? '#34c759' : '#ff3b30' }} />
-                  <span style={{ color: 'var(--muted)', textTransform: 'capitalize' }}>{s.name}</span>
-                  <span style={{ marginLeft: 'auto', color: s.status === 'ok' ? '#34c759' : '#ff3b30' }}>
-                    {s.status === 'ok' ? 'ok' : 'error'}
-                  </span>
+          ) : (() => {
+            const allOk = health.every(s => s.status === 'ok')
+            const expanded = healthExpanded || !allOk
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <div
+                  onClick={() => setHealthExpanded(v => !v)}
+                  style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, cursor: 'pointer',
+                    color: allOk ? '#34c759' : '#ff3b30' }}
+                >
+                  <div style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, background: allOk ? '#34c759' : '#ff3b30' }} />
+                  {allOk ? 'All systems operational' : 'System issue detected'}
                 </div>
-              ))}
-            </div>
-          )}
+                {expanded && health.map(s => (
+                  <div key={s.name} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
+                    <div style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, background: s.status === 'ok' ? '#34c759' : '#ff3b30' }} />
+                    <span style={{ color: 'var(--muted)', textTransform: 'capitalize' }}>{s.name}</span>
+                    <span style={{ marginLeft: 'auto', color: s.status === 'ok' ? '#34c759' : '#ff3b30' }}>
+                      {s.status === 'ok' ? 'ok' : 'error'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )
+          })()}
         </div>
       </div>
     </div>
