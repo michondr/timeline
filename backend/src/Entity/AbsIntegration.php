@@ -2,9 +2,10 @@
 
 namespace App\Entity;
 
+use App\Repository\AbsIntegrationRepository;
 use Doctrine\ORM\Mapping as ORM;
 
-#[ORM\Entity]
+#[ORM\Entity(repositoryClass: AbsIntegrationRepository::class)]
 class AbsIntegration
 {
     #[ORM\Id]

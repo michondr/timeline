@@ -4,10 +4,10 @@ namespace App\MessageHandler;
 
 use App\Entity\Habit;
 use App\Entity\HabitLog;
-use App\Entity\HabitSync;
 use App\Message\SyncTickTickMessage;
 use App\Repository\HabitLogRepository;
 use App\Repository\HabitRepository;
+use App\Repository\HabitSyncRepository;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Messenger\Attribute\AsMessageHandler;
 
@@ -20,6 +20,7 @@ class SyncTickTickHandler
         private readonly EntityManagerInterface $em,
         private readonly HabitRepository $habitRepo,
         private readonly HabitLogRepository $habitLogRepo,
+        private readonly HabitSyncRepository $syncRepo,
     ) {}
 
     public function __invoke(SyncTickTickMessage $message): void
@@ -29,8 +30,8 @@ class SyncTickTickHandler
             return;
         }
 
-        $sync = $this->em->getRepository(HabitSync::class)->findOneBy(['user' => $user]);
-        if (!$sync || !$sync->getSessionToken()) {
+        $sessionToken = $this->syncRepo->sessionToken($user);
+        if (!$sessionToken) {
             return;
         }
 
@@ -38,7 +39,7 @@ class SyncTickTickHandler
         $error  = null;
 
         try {
-            $this->doSync($user, $sync);
+            $this->doSync($user, $sessionToken);
         } catch (\Throwable $e) {
             $status = 'error';
             $error  = $e->getMessage();
@@ -59,9 +60,9 @@ class SyncTickTickHandler
         }
     }
 
-    private function doSync(\App\Entity\User $user, HabitSync $sync): void
+    private function doSync(\App\Entity\User $user, string $sessionToken): void
     {
-        $cookie = trim($sync->getSessionToken());
+        $cookie = trim($sessionToken);
 
         // Extract CSRF token — TickTick requires it as a separate header
         $csrf = '';

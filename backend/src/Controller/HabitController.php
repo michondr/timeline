@@ -2,10 +2,10 @@
 
 namespace App\Controller;
 
-use App\Entity\HabitSync;
 use App\Message\SyncTickTickMessage;
 use App\Repository\HabitLogRepository;
 use App\Repository\HabitRepository;
+use App\Repository\HabitSyncRepository;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -58,9 +58,9 @@ class HabitController extends AbstractController
     }
 
     #[Route('/integration', name: 'integration_get', methods: ['GET'])]
-    public function integrationGet(EntityManagerInterface $em): JsonResponse
+    public function integrationGet(HabitSyncRepository $repo): JsonResponse
     {
-        $sync = $em->getRepository(HabitSync::class)->findOneBy(['user' => $this->getUser()]);
+        $sync = $repo->findForUser($this->getUser());
 
         return $this->json([
             'hasToken'      => $sync && $sync->getSessionToken() !== null,
@@ -71,29 +71,20 @@ class HabitController extends AbstractController
     }
 
     #[Route('/integration', name: 'integration_put', methods: ['PUT'])]
-    public function integrationPut(Request $request, EntityManagerInterface $em): JsonResponse
+    public function integrationPut(Request $request, HabitSyncRepository $repo, EntityManagerInterface $em): JsonResponse
     {
         $data  = json_decode($request->getContent(), true);
         $token = trim((string) ($data['sessionToken'] ?? ''));
 
-        $sync = $em->getRepository(HabitSync::class)->findOneBy(['user' => $this->getUser()]);
-        if (!$sync) {
-            $sync = (new HabitSync())->setUser($this->getUser());
-            $em->persist($sync);
-        }
-
-        $sync->setSessionToken($token ?: null);
-        $em->flush();
+        $repo->saveToken($this->getUser(), $token ?: null, $em);
 
         return $this->json(['ok' => true]);
     }
 
     #[Route('/sync', name: 'sync', methods: ['POST'])]
-    public function sync(EntityManagerInterface $em, MessageBusInterface $bus): JsonResponse
+    public function sync(HabitSyncRepository $repo, MessageBusInterface $bus): JsonResponse
     {
-        $sync = $em->getRepository(HabitSync::class)->findOneBy(['user' => $this->getUser()]);
-
-        if (!$sync || !$sync->getSessionToken()) {
+        if ($repo->sessionToken($this->getUser()) === null) {
             return $this->json(['error' => 'No session token configured'], Response::HTTP_UNPROCESSABLE_ENTITY);
         }
 

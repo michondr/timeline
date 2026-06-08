@@ -15,6 +15,10 @@ services:
             - '../src/Kernel.php'
             - '../src/Migrations/'
 
+    App\Service\EncryptionService:
+        arguments:
+            $appSecret: '%env(APP_SECRET)%'
+
     App\Controller\AuthController:
         arguments:
             $rpId:   '%webauthn_rp_id%'

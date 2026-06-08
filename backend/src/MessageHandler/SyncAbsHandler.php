@@ -2,10 +2,10 @@
 
 namespace App\MessageHandler;
 
-use App\Entity\AbsIntegration;
 use App\Entity\Book;
 use App\Entity\User;
 use App\Message\SyncAbsMessage;
+use App\Repository\AbsIntegrationRepository;
 use App\Repository\BookRepository;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Messenger\Attribute\AsMessageHandler;
@@ -16,6 +16,7 @@ class SyncAbsHandler
     public function __construct(
         private readonly EntityManagerInterface $em,
         private readonly BookRepository $bookRepo,
+        private readonly AbsIntegrationRepository $integrationRepo,
     ) {}
 
     public function __invoke(SyncAbsMessage $message): void
@@ -23,14 +24,16 @@ class SyncAbsHandler
         $user = $this->em->getRepository(User::class)->find($message->userId);
         if (!$user) return;
 
-        $integration = $this->em->getRepository(AbsIntegration::class)->findOneBy(['user' => $user]);
-        if (!$integration || !$integration->getUrl() || !$integration->getToken()) return;
+        $cred = $this->integrationRepo->credentials($user);
+        if (!$cred) return;
+
+        ['url' => $url, 'token' => $token] = $cred;
 
         $status = 'ok';
         $error  = null;
 
         try {
-            $this->doSync($user, $integration);
+            $this->doSync($user, $url, $token);
         } catch (\Throwable $e) {
             $status = 'error';
             $error  = $e->getMessage();
@@ -46,10 +49,8 @@ class SyncAbsHandler
         } catch (\Throwable) {}
     }
 
-    private function doSync(User $user, AbsIntegration $integration): void
+    private function doSync(User $user, string $base, string $token): void
     {
-        $base  = $integration->getUrl();
-        $token = $integration->getToken();
 
         $me           = $this->apiGet($base, $token, '/api/me');
         $bookProgress = array_filter(

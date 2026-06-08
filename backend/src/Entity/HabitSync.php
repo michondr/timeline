@@ -2,9 +2,10 @@
 
 namespace App\Entity;
 
+use App\Repository\HabitSyncRepository;
 use Doctrine\ORM\Mapping as ORM;
 
-#[ORM\Entity]
+#[ORM\Entity(repositoryClass: HabitSyncRepository::class)]
 class HabitSync
 {
     #[ORM\Id]

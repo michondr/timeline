@@ -2,9 +2,9 @@
 
 namespace App\Controller;
 
-use App\Entity\AbsIntegration;
 use App\Entity\Book;
 use App\Message\SyncAbsMessage;
+use App\Repository\AbsIntegrationRepository;
 use App\Repository\BookRepository;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -18,12 +18,14 @@ use Symfony\Component\Routing\Attribute\Route;
 class AbsController extends AbstractController
 {
     #[Route('/integration', name: 'integration_get', methods: ['GET'])]
-    public function getIntegration(EntityManagerInterface $em): JsonResponse
+    public function getIntegration(AbsIntegrationRepository $repo): JsonResponse
     {
-        $i = $em->getRepository(AbsIntegration::class)->findOneBy(['user' => $this->getUser()]);
+        $i    = $repo->findForUser($this->getUser());
+        $cred = $repo->credentials($this->getUser());
+
         return $this->json([
-            'hasCredentials' => (bool) ($i?->getUrl() && $i?->getToken()),
-            'url'            => $i?->getUrl() ?? '',
+            'hasCredentials' => $cred !== null,
+            'url'            => $cred['url'] ?? '',
             'lastRunAt'      => $i?->getLastRunAt()?->format(\DateTimeInterface::ATOM),
             'lastRunStatus'  => $i?->getLastRunStatus(),
             'lastRunError'   => $i?->getLastRunError(),
@@ -31,7 +33,7 @@ class AbsController extends AbstractController
     }
 
     #[Route('/integration', name: 'integration_put', methods: ['PUT'])]
-    public function putIntegration(Request $request, EntityManagerInterface $em): JsonResponse
+    public function putIntegration(Request $request, AbsIntegrationRepository $repo, EntityManagerInterface $em): JsonResponse
     {
         $data  = json_decode($request->getContent(), true) ?? [];
         $url   = rtrim(trim((string) ($data['url']   ?? '')), '/');
@@ -46,21 +48,15 @@ class AbsController extends AbstractController
             return $this->json(['error' => $test['error']], Response::HTTP_UNPROCESSABLE_ENTITY);
         }
 
-        $i = $em->getRepository(AbsIntegration::class)->findOneBy(['user' => $this->getUser()])
-          ?? (new AbsIntegration())->setUser($this->getUser());
-
-        $i->setUrl($url)->setToken($token);
-        $em->persist($i);
-        $em->flush();
+        $repo->saveCredentials($this->getUser(), $url, $token, $em);
 
         return $this->json(['ok' => true]);
     }
 
     #[Route('/sync', name: 'sync', methods: ['POST'])]
-    public function sync(EntityManagerInterface $em, MessageBusInterface $bus): JsonResponse
+    public function sync(AbsIntegrationRepository $repo, MessageBusInterface $bus): JsonResponse
     {
-        $i = $em->getRepository(AbsIntegration::class)->findOneBy(['user' => $this->getUser()]);
-        if (!$i?->getUrl() || !$i?->getToken()) {
+        if ($repo->credentials($this->getUser()) === null) {
             return $this->json(['error' => 'No ABS credentials configured'], Response::HTTP_UNPROCESSABLE_ENTITY);
         }
         $bus->dispatch(new SyncAbsMessage($this->getUser()->getId()));
@@ -78,12 +74,12 @@ class AbsController extends AbstractController
         $books = [...$finished, ...array_slice($unfinished, 0, 2)];
 
         return $this->json(array_values(array_map(fn(Book $b) => [
-            'id'         => $b->getId(),
-            'absItemId'  => $b->getAbsItemId(),
-            'title'      => $b->getTitle(),
-            'author'     => $b->getAuthor(),
-            'startedAt'  => $b->getStartedAt()?->format('Y-m-d'),
-            'finishedAt' => $b->getFinishedAt()?->format('Y-m-d'),
+            'id'          => $b->getId(),
+            'absItemId'   => $b->getAbsItemId(),
+            'title'       => $b->getTitle(),
+            'author'      => $b->getAuthor(),
+            'startedAt'   => $b->getStartedAt()?->format('Y-m-d'),
+            'finishedAt'  => $b->getFinishedAt()?->format('Y-m-d'),
             'isFinished'  => $b->isFinished(),
             'currentTime' => $b->getCurrentTime(),
         ], $books)));

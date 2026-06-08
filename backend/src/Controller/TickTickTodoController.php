@@ -2,7 +2,7 @@
 
 namespace App\Controller;
 
-use App\Entity\HabitSync;
+use App\Repository\HabitSyncRepository;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -18,9 +18,9 @@ class TickTickTodoController extends AbstractController
 
     // ── List open todos tagged "timeline-todo" ─────────────────────────────
     #[Route('/todos', name: 'todos_list', methods: ['GET'])]
-    public function list(EntityManagerInterface $em): JsonResponse
+    public function list(HabitSyncRepository $repo): JsonResponse
     {
-        $headers = $this->headers($em);
+        $headers = $this->headers($repo);
         if ($headers === null) {
             return $this->json(['error' => 'No TickTick session configured'], Response::HTTP_UNPROCESSABLE_ENTITY);
         }
@@ -49,9 +49,9 @@ class TickTickTodoController extends AbstractController
 
     // ── Mark done (status 2) ───────────────────────────────────────────────
     #[Route('/todos/{id}/done', name: 'todos_done', methods: ['POST'])]
-    public function done(string $id, Request $request, EntityManagerInterface $em): JsonResponse
+    public function done(string $id, Request $request, HabitSyncRepository $repo): JsonResponse
     {
-        $headers = $this->headers($em);
+        $headers = $this->headers($repo);
         if ($headers === null) {
             return $this->json(['error' => 'No TickTick session configured'], Response::HTTP_UNPROCESSABLE_ENTITY);
         }
@@ -80,9 +80,9 @@ class TickTickTodoController extends AbstractController
 
     // ── Won't do (status -1 = abandoned) ─────────────────────────────────
     #[Route('/todos/{id}/wontdo', name: 'todos_wontdo', methods: ['POST'])]
-    public function wontDo(string $id, Request $request, EntityManagerInterface $em): JsonResponse
+    public function wontDo(string $id, Request $request, HabitSyncRepository $repo): JsonResponse
     {
-        $headers = $this->headers($em);
+        $headers = $this->headers($repo);
         if ($headers === null) {
             return $this->json(['error' => 'No TickTick session configured'], Response::HTTP_UNPROCESSABLE_ENTITY);
         }
@@ -110,14 +110,14 @@ class TickTickTodoController extends AbstractController
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────
-    private function headers(EntityManagerInterface $em): ?array
+    private function headers(HabitSyncRepository $repo): ?array
     {
-        $sync = $em->getRepository(HabitSync::class)->findOneBy(['user' => $this->getUser()]);
-        if (!$sync || !$sync->getSessionToken()) {
+        $cookie = $repo->sessionToken($this->getUser());
+        if (!$cookie) {
             return null;
         }
 
-        $cookie = trim($sync->getSessionToken());
+        $cookie = trim($cookie);
         $csrf   = '';
         if (preg_match('/_csrf_token=([^;]+)/', $cookie, $m)) {
             $csrf = trim($m[1]);
