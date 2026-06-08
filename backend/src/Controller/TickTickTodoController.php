@@ -123,7 +123,6 @@ class TickTickTodoController extends AbstractController
             $csrf = trim($m[1]);
         }
 
-        // Try to extract device id from cookie (TickTick stores it as `did=<24-hex>`)
         $deviceId = '';
         if (preg_match('/(?:^|;\s*)did=([a-f0-9]{24})/', $cookie, $dm)) {
             $deviceId = $dm[1];
@@ -135,7 +134,7 @@ class TickTickTodoController extends AbstractController
             'device'   => 'Firefox 150.0',
             'name'     => '',
             'version'  => 8090,
-            'id'       => $deviceId ?: '697d21b2922c1f040d8ea2b7',
+            'id'       => $deviceId,
             'channel'  => 'website',
             'campaign' => '',
             'websocket'=> '',
