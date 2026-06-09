@@ -751,7 +751,9 @@ export function Timeline({ view, today, birthdate, categories, events, habits, b
     startX: number; startY: number; prevX: number
     prevDist: number | null
     moved: boolean; isVertical: boolean | null; startTarget: EventTarget | null
+    lastT: number; vx: number   // for flick momentum: timestamp + smoothed px/ms velocity
   } | null>(null)
+  const momentumRef = useRef<number | null>(null)
 
   const latestRef = useRef({ TL_W, span, PAD, w, onPan, onZoom, onZoomBy, onEventClick, onBackgroundClick, onDoubleTap })
   useEffect(() => { latestRef.current = { TL_W, span, PAD, w, onPan, onZoom, onZoomBy, onEventClick, onBackgroundClick, onDoubleTap } })
@@ -761,13 +763,34 @@ export function Timeline({ view, today, birthdate, categories, events, habits, b
     const el = wrapRef.current
     if (!el) return
 
+    function stopMomentum() {
+      if (momentumRef.current !== null) { cancelAnimationFrame(momentumRef.current); momentumRef.current = null }
+    }
+
+    // Continue panning after a flick, decaying velocity with friction each frame.
+    function startMomentum(vx: number) {
+      let v = vx
+      let last = performance.now()
+      const step = (now: number) => {
+        const dt = Math.min(32, now - last)
+        last = now
+        const { TL_W: tlw, span: sp, onPan: pan } = latestRef.current
+        pan(((v * dt) / tlw) * sp)
+        v *= Math.pow(0.997, dt)          // ~exponential decay, framerate-independent
+        if (Math.abs(v) < 0.015) { momentumRef.current = null; return }  // ~15 px/s floor
+        momentumRef.current = requestAnimationFrame(step)
+      }
+      momentumRef.current = requestAnimationFrame(step)
+    }
+
     function onTouchStart(e: TouchEvent) {
+      stopMomentum()  // a new touch grabs control, halting any ongoing fling
       if (e.touches.length === 1) {
-        touchStateRef.current = { startX: e.touches[0].clientX, startY: e.touches[0].clientY, prevX: e.touches[0].clientX, prevDist: null, moved: false, isVertical: null, startTarget: e.target }
+        touchStateRef.current = { startX: e.touches[0].clientX, startY: e.touches[0].clientY, prevX: e.touches[0].clientX, prevDist: null, moved: false, isVertical: null, startTarget: e.target, lastT: e.timeStamp, vx: 0 }
       } else if (e.touches.length === 2) {
         const dx = e.touches[0].clientX - e.touches[1].clientX
         const dy = e.touches[0].clientY - e.touches[1].clientY
-        touchStateRef.current = { startX: 0, startY: 0, prevX: 0, prevDist: Math.sqrt(dx * dx + dy * dy), moved: true, isVertical: null, startTarget: null }
+        touchStateRef.current = { startX: 0, startY: 0, prevX: 0, prevDist: Math.sqrt(dx * dx + dy * dy), moved: true, isVertical: null, startTarget: null, lastT: e.timeStamp, vx: 0 }
       }
     }
 
@@ -786,6 +809,10 @@ export function Timeline({ view, today, birthdate, categories, events, habits, b
         const dx = s.prevX - e.touches[0].clientX
         s.prevX = e.touches[0].clientX
         if (adx > 5) s.moved = true
+        // Smoothed velocity (px/ms) for post-release momentum
+        const dt = Math.max(1, e.timeStamp - s.lastT)
+        s.lastT  = e.timeStamp
+        s.vx     = 0.7 * (dx / dt) + 0.3 * s.vx
         pan((dx / tlw) * sp)
       } else if (e.touches.length === 2) {
         e.preventDefault()
@@ -807,6 +834,10 @@ export function Timeline({ view, today, birthdate, categories, events, habits, b
 
     function onTouchEnd(e: TouchEvent) {
       const s = touchStateRef.current
+      // Flick: if the finger lifted while still moving fast horizontally, coast.
+      if (s && s.moved && !s.isVertical && s.prevDist === null && Math.abs(s.vx) > 0.3 && e.timeStamp - s.lastT < 80) {
+        startMomentum(s.vx)
+      }
       if (s && !s.moved && s.startTarget) {
         // Prevent browser from firing synthetic mousedown/mouseup/click after this tap,
         // which would otherwise immediately call onBackgroundClick and close any panel we open.
@@ -841,6 +872,7 @@ export function Timeline({ view, today, birthdate, categories, events, habits, b
     el.addEventListener('touchmove', onTouchMove, { passive: false })
     el.addEventListener('touchend', onTouchEnd, { passive: false })
     return () => {
+      stopMomentum()
       el.removeEventListener('touchstart', onTouchStart)
       el.removeEventListener('touchmove', onTouchMove)
       el.removeEventListener('touchend', onTouchEnd)
