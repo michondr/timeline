@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { HabitIntegration } from '../types'
+import { PanelShell } from './PanelShell'
 
 interface Props {
   open: boolean
@@ -25,28 +26,7 @@ export function HabitSettingsPanel({ open, integration, onClose, onSave, onSync 
   }
 
   return (
-    <aside style={{
-      position: 'absolute', right: 0, top: 0, bottom: 0, width: 380,
-      background: 'var(--surface)', borderLeft: '1px solid var(--border)',
-      boxShadow: '-8px 0 32px rgba(0,0,0,0.45)', zIndex: 20,
-      display: 'flex', flexDirection: 'column',
-      transform: open ? 'translateX(0)' : 'translateX(105%)',
-      transition: 'transform 0.22s cubic-bezier(0.4,0,0.2,1)',
-      overflow: 'hidden',
-    }}>
-      <div style={{
-        padding: '16px 18px 13px', borderBottom: '1px solid var(--border)',
-        display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexShrink: 0,
-      }}>
-        <div>
-          <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.5px', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 4 }}>
-            Integration
-          </div>
-          <div style={{ fontSize: 16, fontWeight: 600 }}>TickTick Habits</div>
-        </div>
-        <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--muted)', fontSize: 16, width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6 }}>✕</button>
-      </div>
-
+    <PanelShell open={open} eyebrow="Integration" title="TickTick Habits" onClose={onClose}>
       <div style={{ flex: 1, overflowY: 'auto', padding: '14px 18px' }}>
         {integration && (
           <div style={{
@@ -120,7 +100,7 @@ export function HabitSettingsPanel({ open, integration, onClose, onSave, onSync 
           </button>
         )}
       </div>
-    </aside>
+    </PanelShell>
   )
 }
 

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import type { TickTickTodo } from '../types'
-import { useIsMobile } from '../hooks/useIsMobile'
 import { useToast } from './Toast'
+import { PanelShell } from './PanelShell'
 
 interface Props {
   todos: TickTickTodo[]
@@ -21,7 +21,6 @@ const spinner = (
 )
 
 export function TodoPanel({ todos, open, onClose, onDone, onWontDo }: Props) {
-  const isMobile = useIsMobile()
   const addToast = useToast()
   const [processing, setProcessing] = useState<Set<string>>(new Set())
 
@@ -50,37 +49,14 @@ export function TodoPanel({ todos, open, onClose, onDone, onWontDo }: Props) {
   }
 
   return (
-    <>
-      {open && (
-        <div
-          onClick={onClose}
-          style={{ position: 'absolute', inset: 0, zIndex: 24, background: 'rgba(0,0,0,0.35)' }}
-        />
-      )}
-      <aside style={{
-        position: 'absolute', right: 0, top: 0, bottom: 0,
-        width: isMobile ? '100%' : 360,
-        background: 'var(--surface)', borderLeft: isMobile ? 'none' : '1px solid var(--border)',
-        boxShadow: '-8px 0 32px rgba(0,0,0,0.45)', zIndex: 25,
-        display: 'flex', flexDirection: 'column',
-        transform: open ? 'translateX(0)' : 'translateX(105%)',
-        transition: 'transform 0.22s cubic-bezier(0.4,0,0.2,1)',
-        overflow: 'hidden',
-      }}>
-        <div style={{
-          padding: '16px 18px 13px', borderBottom: '1px solid var(--border)',
-          display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexShrink: 0,
-        }}>
-          <div>
-            <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.5px', textTransform: 'uppercase', marginBottom: 4, color: 'var(--accent)' }}>
-              Timeline todos
-            </div>
-            <div style={{ fontSize: 16, fontWeight: 600 }}>Tasks</div>
-            <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 3 }}>TickTick · tag: timeline-todo</div>
-          </div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--muted)', fontSize: 16, width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6 }}>✕</button>
-        </div>
-
+    <PanelShell
+      open={open}
+      eyebrow="Timeline todos"
+      eyebrowColor="var(--accent)"
+      title="Tasks"
+      subtitle="TickTick · tag: timeline-todo"
+      onClose={onClose}
+    >
         <div style={{ flex: 1, overflowY: 'auto', padding: '10px 18px 18px', display: 'flex', flexDirection: 'column', gap: 8 }}>
           {todos.length === 0 && (
             <div style={{ color: 'var(--muted)', fontSize: 13, marginTop: 8 }}>No pending todos.</div>
@@ -123,7 +99,6 @@ export function TodoPanel({ todos, open, onClose, onDone, onWontDo }: Props) {
             )
           })}
         </div>
-      </aside>
-    </>
+    </PanelShell>
   )
 }

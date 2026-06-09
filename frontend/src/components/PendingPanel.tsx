@@ -1,5 +1,5 @@
 import type { Category, TimelineEvent } from '../types'
-import { useIsMobile } from '../hooks/useIsMobile'
+import { PanelShell } from './PanelShell'
 
 interface Props {
   events: TimelineEvent[]
@@ -16,44 +16,17 @@ function fmtDate(s: string) {
 }
 
 export function PendingPanel({ events, categories, open, onClose, onSelect }: Props) {
-  const isMobile = useIsMobile()
   const catById = (id: string) => categories.find(c => c.id === id)
 
   return (
-    <>
-      {open && (
-        <div
-          onClick={onClose}
-          style={{
-            position: 'absolute', inset: 0, zIndex: 24,
-            background: 'rgba(0,0,0,0.35)',
-          }}
-        />
-      )}
-    <aside style={{
-      position: 'absolute', right: 0, top: 0, bottom: 0,
-      width: isMobile ? '100%' : 360,
-      background: 'var(--surface)', borderLeft: isMobile ? 'none' : '1px solid var(--border)',
-      boxShadow: '-8px 0 32px rgba(0,0,0,0.45)', zIndex: 25,
-      display: 'flex', flexDirection: 'column',
-      transform: open ? 'translateX(0)' : 'translateX(105%)',
-      transition: 'transform 0.22s cubic-bezier(0.4,0,0.2,1)',
-      overflow: 'hidden',
-    }}>
-      <div style={{
-        padding: '16px 18px 13px', borderBottom: '1px solid var(--border)',
-        display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexShrink: 0,
-      }}>
-        <div>
-          <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.5px', textTransform: 'uppercase', marginBottom: 4, color: 'var(--warn)' }}>
-            Needs attention
-          </div>
-          <div style={{ fontSize: 16, fontWeight: 600 }}>Pending events</div>
-          <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 3 }}>Events awaiting an end date</div>
-        </div>
-        <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--muted)', fontSize: 16, width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6 }}>✕</button>
-      </div>
-
+    <PanelShell
+      open={open}
+      eyebrow="Needs attention"
+      eyebrowColor="var(--warn)"
+      title="Pending events"
+      subtitle="Events awaiting an end date"
+      onClose={onClose}
+    >
       <div style={{ flex: 1, overflowY: 'auto', padding: '10px 18px 18px', display: 'flex', flexDirection: 'column', gap: 8 }}>
         {events.length === 0 && (
           <div style={{ color: 'var(--muted)', fontSize: 13, marginTop: 8 }}>No pending events.</div>
@@ -82,7 +55,6 @@ export function PendingPanel({ events, categories, open, onClose, onSelect }: Pr
           )
         })}
       </div>
-    </aside>
-    </>
+    </PanelShell>
   )
 }

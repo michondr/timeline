@@ -1,8 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react'
 import type { Category, EventType, TimelineEvent } from '../types'
-import { useIsMobile } from '../hooks/useIsMobile'
+import { PanelShell } from './PanelShell'
 
 interface Props {
+  open: boolean
   event: TimelineEvent | null
   categories: Category[]
   events: TimelineEvent[]
@@ -13,8 +14,7 @@ interface Props {
   onDelete: (id: string) => void
 }
 
-export function SidePanel({ event, categories, events, isNew, defaultCategoryId, onClose, onSave, onDelete }: Props) {
-  const isMobile = useIsMobile()
+export function SidePanel({ open, event, categories, events, isNew, defaultCategoryId, onClose, onSave, onDelete }: Props) {
   const nameRef                 = useRef<HTMLInputElement>(null)
   const [name, setName]         = useState('')
   const [type, setType]         = useState<EventType>('range')
@@ -26,6 +26,8 @@ export function SidePanel({ event, categories, events, isNew, defaultCategoryId,
   const [note, setNote]              = useState('')
 
   useEffect(() => {
+    // Don't re-sync while closing — keeps the body from blanking mid slide-out
+    if (!open) return
     if (event) {
       setName(event.name)
       setType(event.type === 'open' ? 'range' : event.type)
@@ -46,15 +48,16 @@ export function SidePanel({ event, categories, events, isNew, defaultCategoryId,
       setRangeEvId('')
       setNote('')
     }
-  }, [event, categories, isNew, defaultCategoryId])
+  }, [open, event, categories, isNew, defaultCategoryId])
 
-  // Focus the name field when the panel opens for a brand-new event
+  // Focus the name field when the panel opens for a brand-new event.
+  // preventScroll: the panel is still mid slide-in, so a normal focus would
+  // scroll the not-yet-settled input into view and reflow the timeline.
   useEffect(() => {
-    if (isNew && !event) { const t = setTimeout(() => nameRef.current?.focus(), 80); return () => clearTimeout(t) }
+    if (isNew && !event) { const t = setTimeout(() => nameRef.current?.focus({ preventScroll: true }), 80); return () => clearTimeout(t) }
   }, [isNew, event])
 
   const cat = categories.find(c => c.id === categoryId)
-  const hidden = !event && !isNew
 
   const missingStart = type === 'range' && !startDate && !!endDate
   const showNotify   = type === 'range' && (!startDate || !endDate)
@@ -75,30 +78,13 @@ export function SidePanel({ event, categories, events, isNew, defaultCategoryId,
   }
 
   return (
-    <aside style={{
-        position: 'absolute', right: 0, top: 0, bottom: 0,
-        width: isMobile ? '100%' : 380,
-        background: 'var(--surface)', borderLeft: isMobile ? 'none' : '1px solid var(--border)',
-        boxShadow: '-8px 0 32px rgba(0,0,0,0.45)', zIndex: 20,
-        display: 'flex', flexDirection: 'column',
-        transform: hidden ? 'translateX(105%)' : 'translateX(0)',
-        transition: 'transform 0.22s cubic-bezier(0.4,0,0.2,1)',
-        overflow: 'hidden',
-      }}>
-        {/* Header - panel content */}
-        <div style={{
-          padding: '16px 18px 13px', borderBottom: '1px solid var(--border)',
-          display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexShrink: 0,
-        }}>
-          <div>
-            <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.5px', textTransform: 'uppercase', marginBottom: 4, color: cat?.color ?? 'var(--muted)' }}>
-              {cat?.name ?? ''}
-            </div>
-            <div style={{ fontSize: 16, fontWeight: 600 }}>{isNew ? 'New event' : name}</div>
-          </div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--muted)', fontSize: 16, width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6 }}>✕</button>
-        </div>
-
+    <PanelShell
+      open={open}
+      eyebrow={cat?.name ?? ''}
+      eyebrowColor={cat?.color ?? 'var(--muted)'}
+      title={isNew ? 'New event' : name}
+      onClose={onClose}
+    >
         {/* Body */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '14px 18px' }}>
           <Field label="Name">
@@ -202,7 +188,7 @@ export function SidePanel({ event, categories, events, isNew, defaultCategoryId,
             </button>
           )}
         </div>
-      </aside>
+    </PanelShell>
   )
 }
 

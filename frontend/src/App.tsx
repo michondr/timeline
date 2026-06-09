@@ -20,6 +20,17 @@ import type { DateFormat } from './components/AuthFlow'
 
 type Phase = 'loading' | 'auth' | 'unlock' | 'ready'
 
+// The single slide-in panel that may be open. Data-carrying kinds embed their
+// payload so the right panel can render without separate state.
+type ActivePanel =
+  | { kind: 'event'; event: TimelineEvent | null; isNew: boolean }
+  | { kind: 'pending' }
+  | { kind: 'todos' }
+  | { kind: 'category'; autoFocusNew: boolean; expandId: string | null }
+  | { kind: 'habitSettings' }
+  | { kind: 'absSettings' }
+  | null
+
 const TODAY = new Date()
 
 export default function App() {
@@ -35,24 +46,19 @@ export default function App() {
   const [todos, setTodos]                     = useState<TickTickTodo[]>([])
   const [todosLoading, setTodosLoading]       = useState(false)
   const [habitIntegration, setHabitIntegration] = useState<HabitIntegration | null>(null)
-  const [habitSettingsOpen, setHabitSettings]   = useState(false)
 
   const [books, setBooks]                       = useState<Book[]>([])
   const [absIntegration, setAbsIntegration]     = useState<AbsIntegration | null>(null)
-  const [absSettingsOpen, setAbsSettings]       = useState(false)
 
-  const [editEvent, setEditEvent]       = useState<TimelineEvent | null>(null)
-  const [isNewEvent, setIsNewEvent]     = useState(false)
-  const [pendingOpen, setPendingOpen]   = useState(false)
-  const [todoOpen, setTodoOpen]         = useState(false)
-  const [catModalOpen, setCatModal]     = useState(false)
+  // Exactly one slide-in panel can be open at a time. A single source of truth
+  // means opening one inherently closes the rest — no manual sibling-closing.
+  const [panel, setPanel] = useState<ActivePanel>(null)
+  const closePanel = () => setPanel(null)
+
   const [activePreset, setActivePreset] = useState(12)
 
   const [filterOpen, setFilterOpen]   = useState(false)
   const [filterQuery, setFilterQuery] = useState('')
-
-  const [catAutoFocusNew, setCatAutoFocusNew] = useState(false)
-  const [catExpandId, setCatExpandId]         = useState<string | null>(null)
 
   const [lastCatId, setLastCatId]   = useState(() => localStorage.getItem('timeline_last_cat') ?? '')
   const [showHabits, setShowHabits] = useState(() => localStorage.getItem('timeline_show_habits') !== 'false')
@@ -274,7 +280,7 @@ export default function App() {
       const tag = (e.target as HTMLElement).tagName
       const typing = tag === 'INPUT' || tag === 'TEXTAREA'
       if (e.key === 'Escape') {
-        setEditEvent(null); setIsNewEvent(false); setPendingOpen(false); setTodoOpen(false); setCatModal(false); setFilterOpen(false)
+        closePanel(); setFilterOpen(false)
         return
       }
       if (typing || filterOpen) return
@@ -305,7 +311,7 @@ export default function App() {
   }, [filterOpen, pan, setSpan])
 
   function openNew() {
-    setEditEvent(null); setIsNewEvent(true); setPendingOpen(false); setTodoOpen(false)
+    setPanel({ kind: 'event', event: null, isNew: true })
   }
 
   // Zoom/pan the viewport so every matching event fits in view
@@ -331,11 +337,11 @@ export default function App() {
 
   function handleEventClick(id: string) {
     const ev = events.find(e => e.id === id)
-    if (ev) { setEditEvent(ev); setIsNewEvent(false); setPendingOpen(false); setTodoOpen(false) }
+    if (ev) setPanel({ kind: 'event', event: ev, isNew: false })
   }
 
   function handleEditEventFromCat(ev: TimelineEvent) {
-    setEditEvent(ev); setIsNewEvent(false); setPendingOpen(false); setTodoOpen(false)
+    setPanel({ kind: 'event', event: ev, isNew: false })
   }
 
   // ── Command palette dispatch (keywords typed in the filter input) ──────
@@ -348,11 +354,11 @@ export default function App() {
   }
 
   function openNewCategory() {
-    closeAll(); setCatExpandId(null); setCatAutoFocusNew(true); setCatModal(true)
+    setPanel({ kind: 'category', autoFocusNew: true, expandId: null })
   }
 
   function openEditCategory(cat: Category) {
-    closeAll(); setCatAutoFocusNew(false); setCatExpandId(cat.id); setCatModal(true)
+    setPanel({ kind: 'category', autoFocusNew: false, expandId: cat.id })
   }
 
   // Returns true if the query was a recognised command (executed), false → treat as filter
@@ -393,7 +399,7 @@ export default function App() {
   }
 
   function closeAll() {
-    setEditEvent(null); setIsNewEvent(false); setPendingOpen(false); setTodoOpen(false); setCatModal(false); setHabitSettings(false); setAbsSettings(false)
+    closePanel()
   }
 
   async function handleSave(patch: Partial<TimelineEvent> & { id?: string }) {
@@ -438,14 +444,13 @@ export default function App() {
         rangeEventId: created.rangeEventId,
       }])
     }
-    setEditEvent(null)
-    setIsNewEvent(false)
+    closePanel()
   }
 
   async function handleDelete(id: string) {
     await api.deleteEvent(id)
     setEvents(prev => prev.filter(e => e.id !== id))
-    setEditEvent(null)
+    closePanel()
   }
 
   async function handleCreateCat(name: string, color: string) {
@@ -515,13 +520,13 @@ export default function App() {
         birthdate={birthdate}
         panEndMs={panEndMs}
         onNewEvent={openNew}
-        onPending={() => { setTodoOpen(false); setPendingOpen(p => !p) }}
-        onTodos={() => { setPendingOpen(false); setTodoOpen(t => !t) }}
-        onCategories={() => { setCatAutoFocusNew(false); setCatExpandId(null); setCatModal(c => !c) }}
+        onPending={() => setPanel(p => p?.kind === 'pending' ? null : { kind: 'pending' })}
+        onTodos={() => setPanel(p => p?.kind === 'todos' ? null : { kind: 'todos' })}
+        onCategories={() => setPanel(p => p?.kind === 'category' ? null : { kind: 'category', autoFocusNew: false, expandId: null })}
         onExport={handleExport}
-        onHabitSettings={() => { closeAll(); setHabitSettings(true) }}
+        onHabitSettings={() => setPanel(p => p?.kind === 'habitSettings' ? null : { kind: 'habitSettings' })}
         onHabitSync={handleHabitSync}
-        onAbsSettings={() => { closeAll(); setAbsSettings(true) }}
+        onAbsSettings={() => setPanel(p => p?.kind === 'absSettings' ? null : { kind: 'absSettings' })}
         onAbsSync={handleAbsSync}
         onRefresh={handleRefresh}
         onSetSpan={setSpan}
@@ -550,12 +555,13 @@ export default function App() {
         />
 
         <SidePanel
-          event={editEvent}
+          open={panel?.kind === 'event'}
+          event={panel?.kind === 'event' ? panel.event : null}
           categories={categories}
           events={events}
-          isNew={isNewEvent}
+          isNew={panel?.kind === 'event' ? panel.isNew : false}
           defaultCategoryId={lastCatId}
-          onClose={() => { setEditEvent(null); setIsNewEvent(false) }}
+          onClose={closePanel}
           onSave={handleSave}
           onDelete={handleDelete}
         />
@@ -563,43 +569,43 @@ export default function App() {
         <PendingPanel
           events={pendingEvents}
           categories={categories}
-          open={pendingOpen}
-          onClose={() => setPendingOpen(false)}
-          onSelect={ev => { setEditEvent(ev); setIsNewEvent(false); setPendingOpen(false) }}
+          open={panel?.kind === 'pending'}
+          onClose={closePanel}
+          onSelect={ev => setPanel({ kind: 'event', event: ev, isNew: false })}
         />
 
         <TodoPanel
           todos={todos}
-          open={todoOpen}
-          onClose={() => setTodoOpen(false)}
+          open={panel?.kind === 'todos'}
+          onClose={closePanel}
           onDone={handleTodoDone}
           onWontDo={handleTodoWontDo}
         />
 
         <CategoryPanel
-          open={catModalOpen}
+          open={panel?.kind === 'category'}
           categories={categories}
           events={events}
-          autoFocusNew={catAutoFocusNew}
-          expandId={catExpandId}
-          onClose={() => { setCatModal(false); setCatAutoFocusNew(false); setCatExpandId(null) }}
+          autoFocusNew={panel?.kind === 'category' ? panel.autoFocusNew : false}
+          expandId={panel?.kind === 'category' ? panel.expandId : null}
+          onClose={closePanel}
           onCreate={handleCreateCat}
           onDelete={handleDeleteCat}
           onEditEvent={handleEditEventFromCat}
         />
 
         <HabitSettingsPanel
-          open={habitSettingsOpen}
+          open={panel?.kind === 'habitSettings'}
           integration={habitIntegration}
-          onClose={() => setHabitSettings(false)}
+          onClose={closePanel}
           onSave={handleHabitSave}
           onSync={handleHabitSync}
         />
 
         <AbsSettingsPanel
-          open={absSettingsOpen}
+          open={panel?.kind === 'absSettings'}
           integration={absIntegration}
-          onClose={() => setAbsSettings(false)}
+          onClose={closePanel}
           onSave={handleAbsSave}
           onSync={handleAbsSync}
         />

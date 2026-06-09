@@ -196,7 +196,7 @@ export function Topbar({ pendingCount, todoCount, todosLoading, habitIntegration
 
   if (isMobile) {
     return (
-      <header style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)', flexShrink: 0, zIndex: 5 }}>
+      <header style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)', flexShrink: 0, zIndex: 30 }}>
         <div style={{ height: 48, display: 'flex', alignItems: 'center', padding: '0 14px', gap: 8 }}>
           {logo}
           <button onClick={onRefresh} title="Reload data" style={{ background: 'none', border: 'none', color: 'var(--muted)', fontSize: 15, padding: '4px 6px', cursor: 'pointer' }}>↻</button>
@@ -237,7 +237,7 @@ export function Topbar({ pendingCount, todoCount, todosLoading, habitIntegration
     <header style={{
       height: 52, background: 'var(--surface)', borderBottom: '1px solid var(--border)',
       display: 'flex', alignItems: 'center', padding: '0 16px 0 20px',
-      flexShrink: 0, zIndex: 5,
+      flexShrink: 0, zIndex: 30,
     }}>
       {logo}
       <button onClick={onRefresh} title="Reload data" style={{ background: 'none', border: 'none', color: 'var(--muted)', fontSize: 15, padding: '4px 6px', cursor: 'pointer', marginLeft: 4 }}>↻</button>

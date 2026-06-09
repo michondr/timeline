@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Category, TimelineEvent } from '../types'
-import { useIsMobile } from '../hooks/useIsMobile'
+import { PanelShell } from './PanelShell'
 
 interface Props {
   open: boolean
@@ -28,7 +28,6 @@ function fmtDate(s: string | null) {
 }
 
 export function CategoryPanel({ open, categories, events, autoFocusNew, expandId, onClose, onCreate, onDelete, onEditEvent }: Props) {
-  const isMobile = useIsMobile()
   const [expanded, setExpanded] = useState<string | null>(null)
   const [newName, setNewName]   = useState('')
   const [swatch, setSwatch]     = useState(SWATCHES[0])
@@ -61,30 +60,7 @@ export function CategoryPanel({ open, categories, events, autoFocusNew, expandId
   }
 
   return (
-    <aside style={{
-      position: 'absolute', left: 0, top: 0, bottom: 0,
-      width: isMobile ? '100%' : 380,
-      background: 'var(--surface)', borderRight: isMobile ? 'none' : '1px solid var(--border)',
-      boxShadow: '8px 0 32px rgba(0,0,0,0.45)', zIndex: 20,
-      display: 'flex', flexDirection: 'column',
-      transform: open ? 'translateX(0)' : 'translateX(-105%)',
-      transition: 'transform 0.22s cubic-bezier(0.4,0,0.2,1)',
-      overflow: 'hidden',
-    }}>
-      {/* Header */}
-      <div style={{
-        padding: '16px 18px 13px', borderBottom: '1px solid var(--border)',
-        display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexShrink: 0,
-      }}>
-        <div>
-          <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.5px', textTransform: 'uppercase', marginBottom: 4, color: 'var(--muted)' }}>
-            Manage
-          </div>
-          <div style={{ fontSize: 16, fontWeight: 600 }}>Categories</div>
-        </div>
-        <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--muted)', fontSize: 16, width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6 }}>✕</button>
-      </div>
-
+    <PanelShell open={open} side="left" eyebrow="Manage" title="Categories" onClose={onClose}>
       {/* Category list */}
       <div style={{ flex: 1, overflowY: 'auto' }}>
         {categories.map(c => {
@@ -204,6 +180,6 @@ export function CategoryPanel({ open, categories, events, autoFocusNew, expandId
           </button>
         </div>
       </div>
-    </aside>
+    </PanelShell>
   )
 }
