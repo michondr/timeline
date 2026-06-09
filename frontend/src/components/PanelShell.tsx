@@ -14,16 +14,19 @@ interface Props {
 }
 
 /**
- * Shared slide-in drawer shell. Owns the backdrop, positioning, slide-in
- * animation and the standard header (eyebrow + title + subtitle + ✕).
- * Panels render their body (and any footer) as children.
+ * Shared slide-in drawer shell. Owns positioning, the slide-in animation and
+ * the standard header (eyebrow + title + subtitle + ✕). Panels render their
+ * body (and any footer) as children.
  *
  * Only the active panel is mounted (returns null when closed), so switching
  * straight from one panel to another never shows two drawers at once — the
  * old one unmounts instantly while the new one slides in.
  *
- * Layering: backdrop at zIndex 24, drawer at 25 — both below the Topbar
- * (zIndex 30) so its buttons stay clickable while a panel is open.
+ * The dimmed click-outside backdrop is rendered once at the app level (a left
+ * and a right panel can be open together), so it lives there, not here.
+ *
+ * Layering: drawer at zIndex 25, above the shared backdrop (24) and below the
+ * Topbar (30) so its buttons stay clickable while a panel is open.
  */
 export function PanelShell({
   open, side = 'right', width = 380,
@@ -34,11 +37,6 @@ export function PanelShell({
   if (!open) return null
 
   return (
-    <>
-      <div
-        onClick={onClose}
-        style={{ position: 'fixed', inset: 0, zIndex: 24, background: 'rgba(0,0,0,0.35)', animation: 'backdrop-in 0.18s ease' }}
-      />
       <aside style={{
         position: 'absolute', [side]: 0, top: 0, bottom: 0,
         width: isMobile ? '100%' : width,
@@ -68,6 +66,5 @@ export function PanelShell({
         </div>
         {children}
       </aside>
-    </>
   )
 }

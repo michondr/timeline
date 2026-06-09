@@ -20,16 +20,19 @@ import type { DateFormat } from './components/AuthFlow'
 
 type Phase = 'loading' | 'auth' | 'unlock' | 'ready'
 
-// The single slide-in panel that may be open. Data-carrying kinds embed their
-// payload so the right panel can render without separate state.
+// The right-side slide-in panel that may be open. Data-carrying kinds embed
+// their payload so the panel can render without separate state. The category
+// panel is on the left and tracked separately (CatPanel), so it can be open
+// alongside a right panel.
 type ActivePanel =
   | { kind: 'event'; event: TimelineEvent | null; isNew: boolean }
   | { kind: 'pending' }
   | { kind: 'todos' }
-  | { kind: 'category'; autoFocusNew: boolean; expandId: string | null }
   | { kind: 'habitSettings' }
   | { kind: 'absSettings' }
   | null
+
+type CatPanel = { autoFocusNew: boolean; expandId: string | null } | null
 
 const TODAY = new Date()
 
@@ -53,6 +56,7 @@ export default function App() {
   // Exactly one slide-in panel can be open at a time. A single source of truth
   // means opening one inherently closes the rest — no manual sibling-closing.
   const [panel, setPanel] = useState<ActivePanel>(null)
+  const [cat, setCat]     = useState<CatPanel>(null)   // left panel, independent of `panel`
   const closePanel = () => setPanel(null)
 
   const [activePreset, setActivePreset] = useState(12)
@@ -280,7 +284,7 @@ export default function App() {
       const tag = (e.target as HTMLElement).tagName
       const typing = tag === 'INPUT' || tag === 'TEXTAREA'
       if (e.key === 'Escape') {
-        closePanel(); setFilterOpen(false)
+        closeAll(); setFilterOpen(false)
         return
       }
       if (typing || filterOpen) return
@@ -354,11 +358,11 @@ export default function App() {
   }
 
   function openNewCategory() {
-    setPanel({ kind: 'category', autoFocusNew: true, expandId: null })
+    setCat({ autoFocusNew: true, expandId: null })
   }
 
-  function openEditCategory(cat: Category) {
-    setPanel({ kind: 'category', autoFocusNew: false, expandId: cat.id })
+  function openEditCategory(category: Category) {
+    setCat({ autoFocusNew: false, expandId: category.id })
   }
 
   // Returns true if the query was a recognised command (executed), false → treat as filter
@@ -399,7 +403,8 @@ export default function App() {
   }
 
   function closeAll() {
-    closePanel()
+    setPanel(null)
+    setCat(null)
   }
 
   async function handleSave(patch: Partial<TimelineEvent> & { id?: string }) {
@@ -522,7 +527,7 @@ export default function App() {
         onNewEvent={openNew}
         onPending={() => setPanel(p => p?.kind === 'pending' ? null : { kind: 'pending' })}
         onTodos={() => setPanel(p => p?.kind === 'todos' ? null : { kind: 'todos' })}
-        onCategories={() => setPanel(p => p?.kind === 'category' ? null : { kind: 'category', autoFocusNew: false, expandId: null })}
+        onCategories={() => setCat(c => c ? null : { autoFocusNew: false, expandId: null })}
         onExport={handleExport}
         onHabitSettings={() => setPanel(p => p?.kind === 'habitSettings' ? null : { kind: 'habitSettings' })}
         onHabitSync={handleHabitSync}
@@ -554,6 +559,15 @@ export default function App() {
           onDoubleTap={() => setFilterOpen(true)}
         />
 
+        {/* Shared dimmed backdrop — one for any open panel(s); a left and a
+            right panel can be open together. Click anywhere dimmed to dismiss. */}
+        {(panel !== null || cat !== null) && (
+          <div
+            onClick={closeAll}
+            style={{ position: 'fixed', inset: 0, zIndex: 24, background: 'rgba(0,0,0,0.35)', animation: 'backdrop-in 0.18s ease' }}
+          />
+        )}
+
         <SidePanel
           open={panel?.kind === 'event'}
           event={panel?.kind === 'event' ? panel.event : null}
@@ -583,12 +597,12 @@ export default function App() {
         />
 
         <CategoryPanel
-          open={panel?.kind === 'category'}
+          open={cat !== null}
           categories={categories}
           events={events}
-          autoFocusNew={panel?.kind === 'category' ? panel.autoFocusNew : false}
-          expandId={panel?.kind === 'category' ? panel.expandId : null}
-          onClose={closePanel}
+          autoFocusNew={cat?.autoFocusNew ?? false}
+          expandId={cat?.expandId ?? null}
+          onClose={() => setCat(null)}
           onCreate={handleCreateCat}
           onDelete={handleDeleteCat}
           onEditEvent={handleEditEventFromCat}
