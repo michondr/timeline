@@ -26,7 +26,8 @@
         "symfony/doctrine-messenger": "^8.0",
         "symfony/dotenv": "^8.0",
         "symfony/uid": "^8.0",
-        "symfony/http-client": "^8.0"
+        "symfony/http-client": "^8.0",
+        "dragonmantank/cron-expression": "^3.6"
     },
     "require-dev": {
         "symfony/debug-bundle": "^8.0",

@@ -253,3 +253,35 @@ export async function abandonTodo(id: string, projectId: string) {
     await req(`/ticktick/todos/${id}/wontdo`, { method: 'POST', body: JSON.stringify({ projectId }) }),
   )
 }
+
+// ── Backup: JSON export / import ────────────────────────────────────────────────
+
+export interface ExportFile {
+  name: string
+  size: number
+  createdAt: string
+  noChange: boolean
+}
+
+export async function fetchExports() {
+  return json<ExportFile[]>(await req('/exports'))
+}
+
+/** Trigger an on-demand server-side export for the current user. */
+export async function runExport() {
+  return json<{ file: string; changed: boolean }>(await req('/exports/run', { method: 'POST' }))
+}
+
+/** Download an export file as a Blob (authenticated). */
+export async function downloadExport(name: string): Promise<Blob> {
+  const r = await req(`/exports/${encodeURIComponent(name)}/download`)
+  if (!r.ok) throw new ApiError(r.status, 'Download failed')
+  return r.blob()
+}
+
+/** Import a timeline-export dump (raw JSON text) into the current account. */
+export async function importBackup(jsonText: string) {
+  return json<{ imported: { categories: number; events: number } }>(
+    await req('/import', { method: 'POST', body: jsonText }),
+  )
+}

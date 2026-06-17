@@ -13,6 +13,7 @@ import { ToastProvider } from './components/Toast'
 import { CategoryPanel } from './components/CategoryPanel'
 import { HabitSettingsPanel } from './components/HabitSettingsPanel'
 import { AbsSettingsPanel } from './components/AbsSettingsPanel'
+import { BackupPanel } from './components/BackupPanel'
 import { FilterBar } from './components/FilterBar'
 import { applyFilter } from './filter'
 import { AuthFlow } from './components/AuthFlow'
@@ -30,6 +31,7 @@ type ActivePanel =
   | { kind: 'todos' }
   | { kind: 'habitSettings' }
   | { kind: 'absSettings' }
+  | { kind: 'backup' }
   | null
 
 type CatPanel = { autoFocusNew: boolean; expandId: string | null } | null
@@ -52,6 +54,7 @@ export default function App() {
 
   const [books, setBooks]                       = useState<Book[]>([])
   const [absIntegration, setAbsIntegration]     = useState<AbsIntegration | null>(null)
+  const [lastBackupAt, setLastBackupAt]         = useState<string | null>(null)
 
   // Exactly one slide-in panel can be open at a time. A single source of truth
   // means opening one inherently closes the rest — no manual sibling-closing.
@@ -256,7 +259,22 @@ export default function App() {
       api.fetchHabitIntegration().then(setHabitIntegration).catch(() => {}),
       api.fetchAbsIntegration().then(raw => { setAbsIntegration(raw); if (raw.hasCredentials) api.fetchBooks().then(setBooks).catch(() => {}) }).catch(() => {}),
       api.fetchTodos().then(setTodos).catch(() => {}),
+      api.fetchExports().then(setLatestBackup).catch(() => {}),
     ])
+  }
+
+  // The latest export file's timestamp = last time the backup cron (or an
+  // on-demand run) wrote a dump — mirrors the "last run" the sync widgets show.
+  function setLatestBackup(files: api.ExportFile[]) {
+    const latest = files.reduce<string | null>(
+      (acc, f) => (acc === null || f.createdAt > acc ? f.createdAt : acc), null,
+    )
+    setLastBackupAt(latest)
+  }
+
+  async function handleBackupExport() {
+    await api.runExport()
+    await api.fetchExports().then(setLatestBackup).catch(() => {})
   }
 
   async function handleAbsSync() {
@@ -569,6 +587,9 @@ export default function App() {
         onTodos={() => setPanel(p => p?.kind === 'todos' ? null : { kind: 'todos' })}
         onCategories={() => setCat(c => c ? null : { autoFocusNew: false, expandId: null })}
         onExport={handleExport}
+        onBackup={() => setPanel(p => p?.kind === 'backup' ? null : { kind: 'backup' })}
+        onBackupExport={handleBackupExport}
+        lastBackupAt={lastBackupAt}
         onHabitSettings={() => setPanel(p => p?.kind === 'habitSettings' ? null : { kind: 'habitSettings' })}
         onHabitSync={handleHabitSync}
         onAbsSettings={() => setPanel(p => p?.kind === 'absSettings' ? null : { kind: 'absSettings' })}
@@ -665,6 +686,12 @@ export default function App() {
           onClose={closePanel}
           onSave={handleAbsSave}
           onSync={handleAbsSync}
+        />
+
+        <BackupPanel
+          open={panel?.kind === 'backup'}
+          onClose={closePanel}
+          onImported={handleRefresh}
         />
 
         <FilterBar

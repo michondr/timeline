@@ -37,7 +37,7 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    entrypoint: ["sh", "-c", "mkdir -p /var/www/html/var/cache /var/www/html/var/tmp /var/www/html/var/log /var/www/html/public/covers && chown -R www-data:www-data /var/www/html/var /var/www/html/public/covers && exec php-fpm"]
+    entrypoint: ["sh", "-c", "mkdir -p /var/www/html/var/cache /var/www/html/var/tmp /var/www/html/var/log /var/www/html/var/exports /var/www/html/public/covers && chown -R www-data:www-data /var/www/html/var /var/www/html/public/covers && exec php-fpm"]
     environment:
       APP_ENV:                ${APP_ENV:-dev}
       APP_SECRET:             ${APP_SECRET:-changethis_min32chars_xxxxxxxxxxx}
@@ -100,7 +100,7 @@ services:
       context: .
       dockerfile: docker/php/Dockerfile
     restart: unless-stopped
-    command: ["php", "bin/console", "messenger:consume", "async", "--time-limit=3600", "-vv"]
+    command: ["php", "bin/console", "messenger:consume", "async", "scheduler_habit_sync", "--time-limit=3600", "-vv"]
     volumes:
       - ./backend:/var/www/html:cached
     depends_on:

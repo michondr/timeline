@@ -42,6 +42,9 @@ interface Props {
   onTodos: () => void
   onCategories: () => void
   onExport: () => void
+  onBackup: () => void
+  onBackupExport: () => Promise<void>
+  lastBackupAt: string | null
   onHabitSettings: () => void
   onHabitSync: () => Promise<void>
   onAbsSettings: () => void
@@ -145,13 +148,33 @@ function Scrollbar({ ticks, thumbStart, thumbEnd, onSeek }: {
   )
 }
 
-export function Topbar({ pendingCount, todoCount, todosLoading, habitIntegration, absIntegration, view, today, birthdate, panEndMs, onNewEvent, onPending, onTodos, onCategories, onExport, onHabitSettings, onHabitSync, onAbsSettings, onAbsSync, onRefresh, onSetSpan, onSeek }: Props) {
+export function Topbar({ pendingCount, todoCount, todosLoading, habitIntegration, absIntegration, view, today, birthdate, panEndMs, onNewEvent, onPending, onTodos, onCategories, onExport, onBackup, onBackupExport, lastBackupAt, onHabitSettings, onHabitSync, onAbsSettings, onAbsSync, onRefresh, onSetSpan, onSeek }: Props) {
   const isMobile  = useIsMobile()
   const [menuOpen, setMenuOpen] = useState(false)
   const menuTimer  = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   function openMenu()  { if (menuTimer.current) clearTimeout(menuTimer.current); setMenuOpen(true) }
   function closeMenu() { menuTimer.current = setTimeout(() => setMenuOpen(false), 120) }
+
+  // Mobile: long-press the "+ New" button to open the overflow menu; a normal
+  // tap still creates an event. `longPressFired` suppresses the tap that
+  // follows a long press.
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const longPressFired = useRef(false)
+  const [newPressed, setNewPressed] = useState(false)
+  function startLongPress() {
+    longPressFired.current = false
+    setNewPressed(true)
+    longPressTimer.current = setTimeout(() => { longPressFired.current = true; setMenuOpen(true) }, 450)
+  }
+  function cancelLongPress() {
+    setNewPressed(false)
+    if (longPressTimer.current) { clearTimeout(longPressTimer.current); longPressTimer.current = null }
+  }
+  function handleNewTap() {
+    if (longPressFired.current) { longPressFired.current = false; return }
+    onNewEvent()
+  }
 
   // Pan scrollbar: birthdate → latest range event end (or today+1y)
   const birthYear = birthdate.getFullYear()
@@ -199,7 +222,6 @@ export function Topbar({ pendingCount, todoCount, todosLoading, habitIntegration
       <header style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)', flexShrink: 0, zIndex: 30 }}>
         <div style={{ height: 48, display: 'flex', alignItems: 'center', padding: '0 14px', gap: 8 }}>
           {logo}
-          <button onClick={onRefresh} title="Reload data" style={{ background: 'none', border: 'none', color: 'var(--muted)', fontSize: 15, padding: '4px 6px', cursor: 'pointer' }}>↻</button>
           <div style={{ flex: 1 }} />
           <button onClick={onPending} style={{ ...(pendingCount > 0 ? btnWarn : btnGhost), padding: '6px 10px', gap: 5 }}>
             ⚠{pendingCount > 0 && <>{' '}{badge(pendingCount)}</>}
@@ -212,7 +234,33 @@ export function Topbar({ pendingCount, todoCount, todosLoading, habitIntegration
           )}
           <SyncWidget integration={habitIntegration} onOpen={onHabitSettings} onSync={onHabitSync} compact />
           <AbsSyncWidget integration={absIntegration} onOpen={onAbsSettings} onSync={onAbsSync} compact />
-          <button onClick={onNewEvent} style={{ ...btnPrimary, padding: '6px 14px' }}>+ New</button>
+          <BackupWidget onOpen={onBackup} onExport={onBackupExport} lastRunAt={lastBackupAt} compact />
+          <div style={{ position: 'relative' }}>
+            <button
+              onClick={handleNewTap}
+              onTouchStart={startLongPress}
+              onTouchEnd={cancelLongPress}
+              onTouchMove={cancelLongPress}
+              onContextMenu={e => e.preventDefault()}
+              style={{ ...btnPrimary, padding: '6px 14px', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none', touchAction: 'manipulation', filter: (newPressed || menuOpen) ? 'brightness(0.82)' : undefined, transition: 'filter 0.12s ease' }}
+            >
+              + New
+            </button>
+            {menuOpen && (
+              <>
+                <div onClick={() => setMenuOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 99 }} />
+                <div style={{
+                  position: 'absolute', top: '100%', right: 0, marginTop: 4,
+                  background: 'var(--surface)', border: '1px solid var(--border)',
+                  borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.3)',
+                  zIndex: 100, minWidth: 220, overflow: 'hidden',
+                }}>
+                  <button onClick={() => { setMenuOpen(false); onCategories() }} style={dropItem}>⊞ Categories</button>
+                  <button onClick={() => { setMenuOpen(false); onExport() }} style={dropItem}>↓ export events unencrypted to csv</button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
         <div style={{ height: 34, display: 'flex', alignItems: 'center', padding: '0 14px', borderTop: '1px solid var(--border)' }}>
           <div style={{ display: 'flex', background: 'var(--s2)', border: '1px solid var(--border)', borderRadius: 7, overflow: 'hidden', flex: 1 }}>
@@ -277,6 +325,8 @@ export function Topbar({ pendingCount, todoCount, todosLoading, habitIntegration
         <Divider />
         <AbsSyncWidget integration={absIntegration} onOpen={onAbsSettings} onSync={onAbsSync} />
         <Divider />
+        <BackupWidget onOpen={onBackup} onExport={onBackupExport} lastRunAt={lastBackupAt} />
+        <Divider />
         <button onClick={onPending} style={pendingCount > 0 ? btnWarn : btnGhost}>
           ⚠ Pending{pendingCount > 0 && <>{' '}{badge(pendingCount)}</>}
         </button>
@@ -291,7 +341,7 @@ export function Topbar({ pendingCount, todoCount, todosLoading, habitIntegration
           onMouseEnter={openMenu}
           onMouseLeave={closeMenu}
         >
-          <button onClick={onNewEvent} style={btnPrimary}>+ New event</button>
+          <button onClick={onNewEvent} style={{ ...btnPrimary, filter: menuOpen ? 'brightness(0.82)' : undefined, transition: 'filter 0.12s ease' }}>+ New event</button>
           {menuOpen && (
             <div style={{
               position: 'absolute', top: '100%', right: 0, marginTop: 4,
@@ -300,7 +350,7 @@ export function Topbar({ pendingCount, todoCount, todosLoading, habitIntegration
               zIndex: 100, minWidth: 140, overflow: 'hidden',
             }}>
               <button onClick={() => { setMenuOpen(false); onCategories() }} style={dropItem}>⊞ Categories</button>
-              <button onClick={() => { setMenuOpen(false); onExport() }} style={dropItem}>↓ Export</button>
+              <button onClick={() => { setMenuOpen(false); onExport() }} style={dropItem}>↓ export events unencrypted to csv</button>
             </div>
           )}
         </div>
@@ -353,7 +403,7 @@ function useSyncState(onSync: () => Promise<void>) {
   return { syncing, flash, flashError, trigger }
 }
 
-function SyncButton({ syncing, flash, onClick }: { syncing: boolean; flash: 'ok' | 'error' | null; onClick: () => void }) {
+function SyncButton({ syncing, flash, onClick, glyph = '↻' }: { syncing: boolean; flash: 'ok' | 'error' | null; onClick: () => void; glyph?: string }) {
   const col = flash === 'ok' ? '#34c759' : flash === 'error' ? '#ff3b30' : 'var(--muted)'
   return (
     <button
@@ -366,7 +416,7 @@ function SyncButton({ syncing, flash, onClick }: { syncing: boolean; flash: 'ok'
         padding: '1px 5px', cursor: syncing ? 'default' : 'pointer', lineHeight: 1,
       }}
     >
-      <span style={{ display: 'inline-block', animation: syncing ? 'spin 0.7s linear infinite' : 'none' }}>↻</span>
+      <span style={{ display: 'inline-block', animation: syncing ? 'spin 0.7s linear infinite' : 'none' }}>{syncing ? '↻' : glyph}</span>
     </button>
   )
 }
@@ -445,6 +495,44 @@ function AbsSyncWidget({ integration, onOpen, onSync, compact = false }: {
         </button>
       )}
       {integration?.hasCredentials && <SyncButton syncing={syncing} flash={flash} onClick={trigger} />}
+      {flash === 'error' && flashError && (
+        <div style={{
+          position: 'absolute', top: '100%', left: 0, marginTop: 6, zIndex: 20,
+          background: 'var(--surface)', border: '1px solid rgba(255,59,48,0.4)',
+          borderRadius: 6, padding: '6px 10px', fontSize: 11, color: '#ff6b6b',
+          whiteSpace: 'nowrap', boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+        }}>
+          {flashError}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function BackupWidget({ onOpen, onExport, lastRunAt, compact = false }: {
+  onOpen: () => void
+  onExport: () => Promise<void>
+  lastRunAt: string | null
+  compact?: boolean
+}) {
+  const { syncing, flash, flashError, trigger } = useSyncState(onExport)
+
+  const dotColor = flash === 'ok' ? '#34c759'
+    : flash === 'error' ? '#ff3b30'
+    : lastRunAt ? '#34c759'
+    : 'var(--muted)'
+
+  const label = lastRunAt ? `Backup · ${formatAgo(lastRunAt)}` : 'Backup · never'
+
+  return (
+    <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--muted)' }}>
+      <div onClick={onOpen} style={{ width: 7, height: 7, borderRadius: '50%', background: dotColor, flexShrink: 0, cursor: 'pointer' }} />
+      {!compact && (
+        <button onClick={onOpen} style={{ background: 'none', border: 'none', color: 'var(--muted)', fontSize: 12, padding: 0, cursor: 'pointer' }}>
+          {label}
+        </button>
+      )}
+      <SyncButton syncing={syncing} flash={flash} onClick={trigger} glyph="⤓" />
       {flash === 'error' && flashError && (
         <div style={{
           position: 'absolute', top: '100%', left: 0, marginTop: 6, zIndex: 20,

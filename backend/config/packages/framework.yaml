@@ -21,3 +21,5 @@ framework:
                     queue_name: failed
         routing:
             'App\Message\SyncTickTickMessage': async
+            'App\Message\SyncAbsMessage': async
+            'App\Message\ExportTimelineMessage': async
