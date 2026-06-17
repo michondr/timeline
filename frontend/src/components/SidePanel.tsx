@@ -12,9 +12,12 @@ interface Props {
   onClose: () => void
   onSave: (patch: Partial<TimelineEvent> & { id?: string }) => void
   onDelete: (id: string) => void
+  onPinCreate: (parent: TimelineEvent, date: string, name: string) => void | Promise<void>
+  onPinUpdate: (id: string, name: string) => void | Promise<void>
+  onPinDelete: (id: string) => void | Promise<void>
 }
 
-export function SidePanel({ open, event, categories, events, isNew, defaultCategoryId, onClose, onSave, onDelete }: Props) {
+export function SidePanel({ open, event, categories, events, isNew, defaultCategoryId, onClose, onSave, onDelete, onPinCreate, onPinUpdate, onPinDelete }: Props) {
   const nameRef                 = useRef<HTMLInputElement>(null)
   const [name, setName]         = useState('')
   const [type, setType]         = useState<EventType>('range')
@@ -145,6 +148,15 @@ export function SidePanel({ open, event, categories, events, isNew, defaultCateg
             </Field>
           )}
 
+          {!isNew && event && type !== 'pin' && (
+            <PinnedEvents
+              pins={events.filter(e => e.type === 'pin' && e.rangeEventId === event.id)}
+              onCreate={(date, name) => onPinCreate(event, date, name)}
+              onUpdate={onPinUpdate}
+              onDelete={onPinDelete}
+            />
+          )}
+
           {showNotify && (
             <Field>
               <div style={{
@@ -189,6 +201,143 @@ export function SidePanel({ open, event, categories, events, isNew, defaultCateg
           )}
         </div>
     </PanelShell>
+  )
+}
+
+function PinnedEvents({
+  pins, onCreate, onUpdate, onDelete,
+}: {
+  pins: TimelineEvent[]
+  onCreate: (date: string, name: string) => void | Promise<void>
+  onUpdate: (id: string, name: string) => void | Promise<void>
+  onDelete: (id: string) => void | Promise<void>
+}) {
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editName, setEditName]   = useState('')
+  const [newDate, setNewDate]     = useState('')
+  const [newName, setNewName]     = useState('')
+
+  const nameRefs = useRef<(HTMLDivElement | null)[]>([])
+  const delRefs  = useRef<(HTMLButtonElement | null)[]>([])
+  const editRef  = useRef<HTMLInputElement>(null)
+
+  const sorted = [...pins].sort((a, b) => (a.startDate ?? '').localeCompare(b.startDate ?? ''))
+
+  // Focus the edit field once it renders in place of the name.
+  useEffect(() => { if (editingId) editRef.current?.focus() }, [editingId])
+
+  function startEdit(p: TimelineEvent) {
+    setEditName(p.name)
+    setEditingId(p.id)
+  }
+
+  function commitEdit(refocusIndex?: number) {
+    if (editingId) {
+      const trimmed  = editName.trim()
+      const original = sorted.find(p => p.id === editingId)
+      if (trimmed && original && trimmed !== original.name) onUpdate(editingId, trimmed)
+    }
+    setEditingId(null)
+    if (refocusIndex != null) requestAnimationFrame(() => nameRefs.current[refocusIndex]?.focus())
+  }
+
+  function add() {
+    const trimmed = newName.trim()
+    if (!trimmed) return
+    onCreate(newDate, trimmed)
+    setNewDate('')
+    setNewName('')
+  }
+
+  return (
+    <Field label="Pinned events">
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {sorted.length === 0 && (
+          <div style={{ fontSize: 12, color: 'var(--muted)' }}>No pinned events yet.</div>
+        )}
+        {sorted.map((p, i) => {
+          const editing = editingId === p.id
+          return (
+            <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 11, color: 'var(--muted)', minWidth: 78, fontVariantNumeric: 'tabular-nums' }}>
+                {p.startDate ?? '—'}
+              </span>
+              {editing ? (
+                <input
+                  ref={editRef}
+                  className="fi"
+                  value={editName}
+                  onChange={e => setEditName(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter')       { e.preventDefault(); commitEdit(i) }
+                    else if (e.key === 'Escape') { e.preventDefault(); setEditingId(null); requestAnimationFrame(() => nameRefs.current[i]?.focus()) }
+                  }}
+                  style={{ ...fiStyle, flex: 1, padding: '4px 8px' }}
+                />
+              ) : (
+                <div
+                  ref={el => { nameRefs.current[i] = el }}
+                  tabIndex={0}
+                  onClick={() => startEdit(p)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter')           { e.preventDefault(); startEdit(p) }
+                    else if (e.key === 'ArrowDown')  { e.preventDefault(); nameRefs.current[i + 1]?.focus() }
+                    else if (e.key === 'ArrowUp')    { e.preventDefault(); nameRefs.current[i - 1]?.focus() }
+                    else if (e.key === 'ArrowRight') { e.preventDefault(); delRefs.current[i]?.focus() }
+                  }}
+                  style={{ flex: 1, fontSize: 13, cursor: 'text', padding: '4px 6px', outline: 'none', borderRadius: 5 }}
+                >
+                  {p.name}
+                </div>
+              )}
+              <button
+                ref={el => { delRefs.current[i] = el }}
+                onClick={() => editing ? commitEdit(i) : onDelete(p.id)}
+                onKeyDown={e => { if (e.key === 'ArrowLeft') { e.preventDefault(); nameRefs.current[i]?.focus() } }}
+                title={editing ? 'Save' : 'Delete'}
+                style={{
+                  flexShrink: 0, width: 24, height: 24, display: 'grid', placeItems: 'center',
+                  border: 'none', background: 'transparent', cursor: 'pointer', borderRadius: 5,
+                  color: editing ? '#34c759' : '#ff3b30', fontSize: 15, lineHeight: 1,
+                }}
+              >
+                {editing ? '✓' : '✕'}
+              </button>
+            </div>
+          )
+        })}
+
+        {/* Add row — date + text is enough to create a pin */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2 }}>
+          <input
+            type="date"
+            value={newDate}
+            onChange={e => setNewDate(e.target.value)}
+            style={{ ...fiStyle, width: 'auto', minWidth: 78, padding: '4px 8px', fontSize: 11 }}
+          />
+          <input
+            className="fi"
+            value={newName}
+            placeholder="Add pinned event…"
+            onChange={e => setNewName(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); add() } }}
+            style={{ ...fiStyle, flex: 1, padding: '4px 8px' }}
+          />
+          <button
+            onClick={add}
+            disabled={!newName.trim()}
+            title="Add"
+            style={{
+              flexShrink: 0, width: 24, height: 24, display: 'grid', placeItems: 'center',
+              border: 'none', background: 'transparent', cursor: newName.trim() ? 'pointer' : 'default',
+              borderRadius: 5, color: newName.trim() ? 'var(--accent)' : 'var(--muted)', fontSize: 18, lineHeight: 1,
+            }}
+          >
+            +
+          </button>
+        </div>
+      </div>
+    </Field>
   )
 }
 

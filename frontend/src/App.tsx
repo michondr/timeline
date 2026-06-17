@@ -458,6 +458,46 @@ export default function App() {
     closePanel()
   }
 
+  // Inline pin management from within a range event's panel. These persist
+  // immediately and intentionally leave the panel open.
+  async function handlePinCreate(parent: TimelineEvent, date: string, name: string) {
+    if (!encKey) return
+    const encName = await encryptField(encKey, name)
+    const created = await api.createEvent({
+      categoryId: parent.categoryId,
+      name: encName,
+      type: 'pin',
+      startDate: date || null,
+      endDate: null,
+      notifyForEnd: false,
+      note: null,
+      rangeEventId: parent.id,
+    })
+    setEvents(prev => [...prev, {
+      id: created.id,
+      categoryId: created.categoryId,
+      name,
+      type: created.type,
+      startDate: created.startDate,
+      endDate: created.endDate,
+      notifyForEnd: created.notifyForEnd,
+      note: null,
+      rangeEventId: created.rangeEventId,
+    }])
+  }
+
+  async function handlePinUpdate(id: string, name: string) {
+    if (!encKey) return
+    const encName = await encryptField(encKey, name)
+    await api.updateEvent(id, { name: encName })
+    setEvents(prev => prev.map(e => e.id === id ? { ...e, name } : e))
+  }
+
+  async function handlePinDelete(id: string) {
+    await api.deleteEvent(id)
+    setEvents(prev => prev.filter(e => e.id !== id))
+  }
+
   async function handleCreateCat(name: string, color: string) {
     if (!encKey) return
     const encName = await encryptField(encKey, name)
@@ -578,6 +618,9 @@ export default function App() {
           onClose={closePanel}
           onSave={handleSave}
           onDelete={handleDelete}
+          onPinCreate={handlePinCreate}
+          onPinUpdate={handlePinUpdate}
+          onPinDelete={handlePinDelete}
         />
 
         <PendingPanel

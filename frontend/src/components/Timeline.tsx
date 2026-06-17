@@ -240,6 +240,10 @@ export function Timeline({ view, today, birthdate, categories, events, habits, b
   pieces.push(`<circle cx="${todayX}" cy="${AXIS_Y}" r="4" fill="#ff3b30"/>`)
   pieces.push(`<text x="${todayX + 7}" y="40" fill="#ff3b30" font-size="11" font-family="system-ui" font-weight="500">today</text>`)
 
+  // Invisible wide stroke laid under each event line to widen the clickable
+  // band without thickening the visible 2px line.
+  const HIT_W = 18
+
   // ── Closed/Range events: swimlanes grouped by category ───────────────────
   // Each category gets its own vertical block above the axis. Within a category,
   // events whose date ranges overlap are pushed onto separate lanes; the
@@ -302,6 +306,7 @@ export function Timeline({ view, today, birthdate, categories, events, habits, b
 
       const sub = `${fmtDate(start)} – ${fmtDate(end)} · ${fmtDays(dur)}`
       pieces.push(`<g class="ev" data-id="${ev.id}" data-tip="${encodeURIComponent(JSON.stringify({ name: ev.name, sub }))}" style="cursor:pointer;opacity:${evOpacity(ev.id)}">`)
+      pieces.push(`<line x1="${x1}" y1="${y}" x2="${x2}" y2="${y}" stroke="transparent" stroke-width="${HIT_W}" pointer-events="stroke"/>`)
       pieces.push(`<line x1="${x1}" y1="${y}" x2="${x2}" y2="${y}" stroke="${col}" stroke-width="2"/>`)
       pieces.push(`<circle cx="${x1}" cy="${y}" r="4" fill="${col}"/>`)
       pieces.push(`<circle cx="${x2}" cy="${y}" r="4" fill="${col}"/>`)
@@ -329,6 +334,7 @@ export function Timeline({ view, today, birthdate, categories, events, habits, b
       const sub    = `Open · ends ${fmtDate(end)}`
       const endsInView = endX <= w - EVT_PAD
       pieces.push(`<g class="ev" data-id="${ev.id}" data-tip="${encodeURIComponent(JSON.stringify({ name: ev.name, sub }))}" style="cursor:pointer;opacity:${evOpacity(ev.id)}">`)
+      pieces.push(`<line x1="${x1}" y1="${y}" x2="${x2}" y2="${y}" stroke="transparent" stroke-width="${HIT_W}" pointer-events="stroke"/>`)
       pieces.push(`<polygon points="${x1 + 12},${y - 5} ${x1},${y} ${x1 + 12},${y + 5}" fill="${col}"/>`)
       pieces.push(`<line x1="${x1 + 12}" y1="${y}" x2="${x2}" y2="${y}" stroke="${col}" stroke-width="2"/>`)
       if (endsInView) {
@@ -359,6 +365,7 @@ export function Timeline({ view, today, birthdate, categories, events, habits, b
       pieces.push(`<line x1="${startX}" y1="${y}" x2="${startX}" y2="${AXIS_Y}" stroke="${col}" stroke-width="1" opacity="0.12"/>`)
       pieces.push(`<circle cx="${startX}" cy="${y}" r="5" fill="${col}"/>`)
     }
+    pieces.push(`<line x1="${x1}" y1="${y}" x2="${x2}" y2="${y}" stroke="transparent" stroke-width="${HIT_W}" pointer-events="stroke"/>`)
     pieces.push(`<line x1="${x1}" y1="${y}" x2="${x2 - 14}" y2="${y}" stroke="${col}" stroke-width="2"/>`)
     pieces.push(`<polygon points="${x2 - 12},${y - 5} ${x2},${y} ${x2 - 12},${y + 5}" fill="${col}"/>`)
     if (ev.notifyForEnd) {
